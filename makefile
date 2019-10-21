@@ -6,7 +6,7 @@
 TARGET	   ?= exactstep
 
 # Source Files
-SRC_DIR    = core peripherals cpu-rv32 cpu-armv6m cli platforms device-tree
+SRC_DIR    = core peripherals cpu-rv32 cpu-rv64 cpu-armv6m cli platforms device-tree
 
 CFLAGS	    = -O2 -fPIC
 CFLAGS     += -Wno-format

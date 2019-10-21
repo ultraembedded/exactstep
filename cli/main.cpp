@@ -18,6 +18,7 @@
 
 #include "platform_armv6m_basic.h"
 #include "platform_rv32im_basic.h"
+#include "platform_rv64im_basic.h"
 #include "platform_device_tree.h"
 
 static volatile bool m_user_abort = false;
@@ -101,7 +102,7 @@ int main(int argc, char *argv[])
     {
         fprintf (stderr,"Usage:\n");
         fprintf (stderr,"-f filename.bin/elf = Executable to load\n");
-        fprintf (stderr,"-P platform         = (Optional) Platform to simulate (rv32im-basic|armv6m-basic)\n");
+        fprintf (stderr,"-P platform         = (Optional) Platform to simulate (rv32im-basic|rv64im-basic|armv6m-basic)\n");
         fprintf (stderr,"-D device.dtb       = (Optional) Device tree blob (binary)\n");
         fprintf (stderr,"-t                  = (Optional) Enable program trace\n");
         fprintf (stderr,"-v 0xX              = (Optional) Trace Mask\n");
@@ -136,10 +137,12 @@ int main(int argc, char *argv[])
     }
     else if (!strcmp(platform_name, "rv32im-basic"))
         plat = new platform_rv32im_basic(0, 0, con);
+    else if (!strcmp(platform_name, "rv64im-basic"))
+        plat = new platform_rv64im_basic(0, 0, con);
     else
     {
         fprintf (stderr,"Error: Unsupported platform\n");
-        fprintf (stderr,"Supported: armv6m-basic, rv32im-basic\n");
+        fprintf (stderr,"Supported: armv6m-basic, rv32im-basic, rv64im-basic\n");
         exit(-1);
     }
 

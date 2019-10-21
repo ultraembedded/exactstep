@@ -35,7 +35,7 @@ $ make
 ```
 Usage:
 -f filename.bin/elf = Executable to load
--P platform         = (Optional) Platform to simulate (rv32im-basic|armv6m-basic)
+-P platform         = (Optional) Platform to simulate (rv32im-basic|rv64im-basic|armv6m-basic)
 -D device.dtb       = (Optional) Device tree blob (binary)
 -t                  = (Optional) Enable program trace
 -v 0xX              = (Optional) Trace Mask
