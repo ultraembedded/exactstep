@@ -33,6 +33,7 @@ rv32::rv32(uint32_t baseAddr /*= 0*/, uint32_t len /*= 0*/): cpu()
 {
     m_enable_mem_errors  = false;
     m_compliant_csr      = false;
+    m_enable_rvc         = true;
 
     // Some memory defined
     if (len != 0)
@@ -147,7 +148,15 @@ void rv32::reset(uint32_t start_addr)
 //-----------------------------------------------------------------
 uint32_t rv32::get_opcode(uint32_t address)
 {
-    return read32(address);
+    // 2 byte aligned addresses are supported if RVC
+    if (m_enable_rvc && (address & 2))
+    {
+        uint32_t opcode = read32(address & ~3);
+        opcode >>= 16;
+        return (read32((address+4) & ~3) << 16) | opcode;
+    }
+    else
+        return read32(address);
 }
 //-----------------------------------------------------------------
 // mmu_read_word: Read a word from memory
@@ -627,7 +636,7 @@ bool rv32::access_csr(uint32_t address, uint32_t data, bool set, bool clr, uint3
         CSR_STD(MSTATUS, m_csr_msr)
         CSR_STD(MIP,     m_csr_mip)
         CSR_STD(MIE,     m_csr_mie)
-        CSR_CONST(MISA,  MISA_VALUE)
+        CSR_CONST(MISA,  (m_enable_rvc ? (MISA_RVC | MISA_VALUE) : MISA_VALUE))
         CSR_STD(MIDELEG, m_csr_mideleg)
         CSR_STD(MEDELEG, m_csr_medeleg)
         CSR_STD(MSCRATCH,m_csr_mscratch)
@@ -1411,6 +1420,422 @@ void rv32::execute(void)
         DPRINTF(LOG_INST,("%08x: wfi\n", pc));
         INST_STAT(ENUM_INST_WFI);
         pc += 4;
+    }
+    // RVC - Quadrant 0
+    else if (m_enable_rvc && ((opcode & 3) == 0))
+    {
+        opcode &= 0xFFFF;
+        rvc_decode rvc(opcode);
+
+        rs1     = rvc.rs1s();
+        rs2     = rvc.rs2s();
+        rd      = rs2;
+        reg_rs1 = m_gpr[rs1];
+        reg_rs2 = m_gpr[rs2];        
+
+        // C.ADDI4SPN
+        if ((opcode >> 13) == 0 && opcode != 0)
+        {
+            rs1     = RISCV_REG_SP;
+            reg_rs1 = m_gpr[rs1];
+
+            uint32_t imm = rvc.addi4spn_imm();
+            DPRINTF(LOG_INST,("%08x: c.addi4spn r%d,r%d,%d\n", pc, rd, rs1, imm));
+            INST_STAT(ENUM_INST_ADDI);
+            reg_rd = reg_rs1 + imm;
+            pc += 2;
+        }
+        // C.LW
+        else if ((opcode >> 13) == 2)
+        {
+            uint32_t imm = rvc.lw_imm();
+            DPRINTF(LOG_INST,("%08x: c.lw r%d, %d(r%d)\n", pc, rd, imm, rs1));
+            INST_STAT(ENUM_INST_LW);
+            if (load(pc, reg_rs1 + imm, &reg_rd, 4, true))
+                pc += 2;
+            else
+                return;
+        }
+        // C.LD
+        else if ((opcode >> 13) == 3)
+        {
+            error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            m_fault        = true;
+            take_exception = true;
+        }
+        // C.SW
+        else if ((opcode >> 13) == 6)
+        {
+            uint32_t imm = rvc.lw_imm();
+            DPRINTF(LOG_INST,("%08x: c.sw %d(r%d), r%d\n", pc, imm, rs1, rd));
+            INST_STAT(ENUM_INST_SW);
+            if (store(pc, reg_rs1 + imm, reg_rs2, 4))
+                pc += 2;
+            else
+                return ;
+
+            // No writeback
+            rd = 0;
+        }
+        // C.SD
+        else if ((opcode >> 13) == 7)
+        {
+            error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            m_fault        = true;
+            take_exception = true;
+        }
+        // Illegal instruction
+        else
+        {
+            error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            m_fault        = true;
+            take_exception = true;
+        }
+    }
+    // RVC - Quadrant 1 (top half - c.nop - c.lui)
+    else if (m_enable_rvc && ((opcode & 3) == 1) && (((opcode & 0xFFFF) >> 13) < 4))
+    {
+        opcode &= 0xFFFF;
+        rvc_decode rvc(opcode);
+
+        rs1     = rvc.rs1();
+        rs2     = rvc.rs2();
+        rd      = rs1;
+        reg_rs1 = m_gpr[rs1];
+        reg_rs2 = m_gpr[rs2];
+
+        // C.NOP
+        if ((opcode >> 13) == 0 && opcode == 0)
+        {
+            DPRINTF(LOG_INST,("%08x: c.nop\n", pc));
+            INST_STAT(ENUM_INST_ADDI);
+            pc += 2;
+        }
+        // C.ADDI
+        else if ((opcode >> 13) == 0)
+        {
+            int32_t imm = rvc.imm();
+            DPRINTF(LOG_INST,("%08x: c.addi r%d, %d\n", pc, rs1, imm));
+            INST_STAT(ENUM_INST_ADDI);
+            reg_rd = reg_rs1 + imm;
+            pc += 2;
+        }
+        // C.JAL // TODO: C.ADDIW on RV64
+        else if ((opcode >> 13) == 1)
+        {
+            uint32_t imm = rvc.j_imm();
+            DPRINTF(LOG_INST,("%08x: c.jal 0x%08x\n", pc, pc + imm));
+            INST_STAT(ENUM_INST_JAL);
+            rd     = RISCV_REG_RA;
+            reg_rd = pc + 2;
+            pc += imm;
+        }
+        // C.LI
+        else if ((opcode >> 13) == 2)
+        {
+            uint32_t imm = rvc.imm();
+            DPRINTF(LOG_INST,("%08x: c.li r%d, %d\n", pc, rd, imm));
+            INST_STAT(ENUM_INST_LUI);
+            reg_rd = imm;
+            pc += 2;
+        }
+        // C.ADDI16SP
+        else if ((opcode >> 13) == 3 && ((opcode >> 7) & 0x1f) == 2)
+        {
+            uint32_t imm = rvc.addi16sp_imm();
+            rd      = RISCV_REG_SP;
+            rs1     = RISCV_REG_SP;
+            reg_rs1 = m_gpr[rs1];
+            DPRINTF(LOG_INST,("%08x: c.addi16sp r%d, r%d, %d\n", pc, rd, rs1, imm));
+            INST_STAT(ENUM_INST_ADDI);
+            reg_rd  = reg_rs1 + imm;
+            pc += 2;
+        }
+        // C.LUI
+        else if ((opcode >> 13) == 3)
+        {
+            uint32_t imm = rvc.imm() << 12;
+            DPRINTF(LOG_INST,("%08x: c.lui r%d, 0x%x\n", pc, rd, imm));
+            INST_STAT(ENUM_INST_LUI);
+            reg_rd  = imm;
+            pc += 2;
+        }
+        // Illegal instruction
+        else
+        {
+            error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            m_fault        = true;
+            take_exception = true;
+        }
+    }
+    // RVC - Quadrant 1 (bottom half - c.srli -)
+    else if (m_enable_rvc && ((opcode & 3) == 1))
+    {
+        opcode &= 0xFFFF;
+        rvc_decode rvc(opcode);
+
+        rs1     = rvc.rs1s();
+        rs2     = rvc.rs2s();
+        rd      = rs1;
+        reg_rs1 = m_gpr[rs1];
+        reg_rs2 = m_gpr[rs2];
+
+        // C.SRLI
+        if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x3) == 0)
+        {
+            uint32_t imm = rvc.zimm();
+            DPRINTF(LOG_INST,("%08x: c.srli r%d, %d\n", pc, rd, imm));
+            INST_STAT(ENUM_INST_SRLI);
+            reg_rd = reg_rs1 >> imm;
+            pc += 2;
+        }
+        // C.SRAI
+        else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x3) == 1)
+        {
+            uint32_t imm = rvc.zimm();
+            DPRINTF(LOG_INST,("%08x: c.srai r%d, %d\n", pc, rd, imm));
+            INST_STAT(ENUM_INST_SRAI);
+            reg_rd = (int32_t)reg_rs1 >> imm;
+            pc += 2;
+        }
+        // C.ANDI
+        else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x3) == 2)
+        {
+            uint32_t imm = rvc.imm();
+            DPRINTF(LOG_INST,("%08x: c.andi r%d, 0x%08x\n", pc, rd, imm));
+            INST_STAT(ENUM_INST_ANDI);
+            reg_rd = reg_rs1 & imm;
+            pc += 2;
+        }
+        // C.SUB
+        else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x7) == 3 && ((opcode >> 5) & 0x3) == 0)
+        {
+            DPRINTF(LOG_INST,("%08x: c.sub r%d, r%d\n", pc, rs1, rs2));
+            INST_STAT(ENUM_INST_SUB);
+            reg_rd = (int32_t)(reg_rs1 - reg_rs2);
+            pc += 2;
+        }
+        // C.XOR
+        else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x7) == 3 && ((opcode >> 5) & 0x3) == 1)
+        {
+            DPRINTF(LOG_INST,("%08x: c.xor r%d, r%d\n", pc, rs1, rs2));
+            INST_STAT(ENUM_INST_XOR);
+            reg_rd = reg_rs1 ^ reg_rs2;
+            pc += 2;
+        }
+        // C.OR
+        else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x7) == 3 && ((opcode >> 5) & 0x3) == 2)
+        {
+            DPRINTF(LOG_INST,("%08x: c.or r%d, r%d\n", pc, rs1, rs2));
+            INST_STAT(ENUM_INST_OR);
+            reg_rd = reg_rs1 | reg_rs2;
+            pc += 2;
+        }
+        // C.AND
+        else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x7) == 3 && ((opcode >> 5) & 0x3) == 3)
+        {
+            DPRINTF(LOG_INST,("%08x: c.and r%d, r%d\n", pc, rs1, rs2));
+            INST_STAT(ENUM_INST_AND);
+            reg_rd = reg_rs1 & reg_rs2;
+            pc += 2;
+        }
+        // C.SUBW
+        else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x7) == 7 && ((opcode >> 5) & 0x3) == 0)
+        {
+            error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            m_fault        = true;
+            take_exception = true;
+        }
+        // C.ADDW
+        else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x7) == 7 && ((opcode >> 5) & 0x3) == 1)
+        {
+            error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            m_fault        = true;
+            take_exception = true;
+        }
+        // C.J
+        else if ((opcode >> 13) == 5)
+        {
+            uint32_t imm = rvc.j_imm();
+            DPRINTF(LOG_INST,("%08x: c.j 0x%08x\n", pc, pc + imm));
+            INST_STAT(ENUM_INST_J);
+            pc += imm;
+            rd = 0;
+        }
+        // C.BEQZ
+        else if ((opcode >> 13) == 6)
+        {
+            uint32_t imm = rvc.b_imm();
+
+            DPRINTF(LOG_INST,("%08x: c.beqz r%d, %d\n", pc, rs1, imm));
+            INST_STAT(ENUM_INST_BEQ);
+            if (reg_rs1 == 0)
+                pc += imm;
+            else
+                pc += 2;
+            rd = 0;
+        }
+        // C.BNEZ
+        else if ((opcode >> 13) == 7)
+        {
+            uint32_t imm = rvc.b_imm();
+            DPRINTF(LOG_INST,("%08x: c.bnez r%d, %d\n", pc, rs1, imm));
+            INST_STAT(ENUM_INST_BNE);
+            if (reg_rs1 != 0)
+                pc += imm;
+            else
+                pc += 2;
+            rd = 0;
+        }
+        // Illegal instruction
+        else
+        {
+            error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            m_fault        = true;
+            take_exception = true;
+        }
+    }
+    // RVC - Quadrant 2
+    else if (m_enable_rvc && ((opcode & 3) == 2))
+    {
+        opcode &= 0xFFFF;
+
+        rvc_decode rvc(opcode);
+        rs1     = rvc.rs1();
+        rs2     = rvc.rs2();
+        rd      = rs1;
+        reg_rs1 = m_gpr[rs1];
+        reg_rs2 = m_gpr[rs2];
+
+        // C.SLLI
+        if ((opcode >> 13) == 0)
+        {
+            uint32_t imm = rvc.zimm();
+            DPRINTF(LOG_INST,("%08x: c.slli r%d, %d\n", pc, rs1, imm));
+            INST_STAT(ENUM_INST_SLLI);
+            reg_rd = reg_rs1 << imm;
+            pc += 2;
+        }
+        // C.LWSP
+        else if ((opcode >> 13) == 2)
+        {
+            uint32_t imm = rvc.lwsp_imm();
+            rs1     = RISCV_REG_SP;
+            reg_rs1 = m_gpr[rs1];
+
+            DPRINTF(LOG_INST,("%08x: c.lwsp r%d, %d(r%d)\n", pc, rd, imm, rs1));
+            INST_STAT(ENUM_INST_LW);
+            if (load(pc, reg_rs1 + imm, &reg_rd, 4, true))
+                pc += 2;
+            else
+                return;
+        }
+        // C.LDSP
+        else if ((opcode >> 13) == 3)
+        {
+            error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            m_fault        = true;
+            take_exception = true;
+        }
+        // C.JR
+        // C.MV
+        // C.EBREAK
+        // C.JALR
+        // C.ADD
+        else if ((opcode >> 13) == 4)
+        {
+            if (!(opcode & (1 << 12)))
+            {
+                // C.JR
+                if (((opcode >> 2) & 0x1F) == 0)
+                {
+                    rd = 0;
+                    DPRINTF(LOG_INST,("%08x: c.jr r%d\n", pc, rs1));
+                    INST_STAT(ENUM_INST_J);
+                    pc = reg_rs1 & ~1;
+                }
+                // C.MV
+                else
+                {
+                    DPRINTF(LOG_INST,("%08x: c.mv r%d, r%d\n", pc, rd, rs2));
+                    INST_STAT(ENUM_INST_ADD);
+                    pc += 2;
+                    reg_rd = reg_rs2;
+                }
+            }
+            else
+            {
+                // C.EBREAK
+                if (((opcode >> 7) & 0x1F) == 0 && ((opcode >> 2) & 0x1F) == 0)
+                {
+                    rd = 0;
+                    DPRINTF(LOG_INST,("%08x: c.ebreak\n", pc));
+                    INST_STAT(ENUM_INST_EBREAK);
+
+                    exception(MCAUSE_BREAKPOINT, pc);
+                    take_exception   = true;
+                    m_break          = true;
+                }
+                // C.JALR
+                else if (((opcode >> 2) & 0x1F) == 0)
+                {
+                    rd = RISCV_REG_RA;
+                    DPRINTF(LOG_INST,("%08x: c.jalr r%d, r%d\n", pc, rd, rs1));
+                    INST_STAT(ENUM_INST_JALR);
+                    reg_rd = pc + 2;
+                    pc     = reg_rs1 & ~1;
+                }
+                // C.ADD
+                else
+                {
+                    DPRINTF(LOG_INST,("%08x: c.add r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+                    INST_STAT(ENUM_INST_ADD);
+                    reg_rd = reg_rs1 + reg_rs2;
+                    pc += 2;
+                }
+            }
+        }
+        // C.SWSP
+        else if ((opcode >> 13) == 6)
+        {
+            uint32_t uimm = rvc.swsp_imm();
+            rs1     = RISCV_REG_SP;
+            reg_rs1 = m_gpr[rs1];
+            DPRINTF(LOG_INST,("%08x: c.swsp r%d, %d(r%d)\n", pc, rs2, uimm, rs1));
+            INST_STAT(ENUM_INST_SW);
+
+            if (store(pc, reg_rs1 + uimm, reg_rs2, 4))
+                pc += 2;
+            else
+                return ;
+
+            // No writeback
+            rd = 0;            
+        }
+        // C.SDSP
+        else if ((opcode >> 13) == 7)
+        {
+            error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            m_fault        = true;
+            take_exception = true;
+        }
+        // Illegal instruction
+        else
+        {
+            error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            m_fault        = true;
+            take_exception = true;
+        }
     }
     else
     {

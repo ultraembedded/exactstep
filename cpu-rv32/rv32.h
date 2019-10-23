@@ -48,6 +48,8 @@ public:
     // Number of registers (max) used for args
     int                 get_abi_reg_num(void) { return 8; }
 
+    void                enable_rvc(bool en) { m_enable_rvc = en; }
+
 protected:  
     void                execute(void);
     int                 load(uint32_t pc, uint32_t address, uint32_t *result, int width, bool signedLoad);
@@ -94,6 +96,7 @@ private:
     // Settings
     bool                m_enable_mem_errors;
     bool                m_compliant_csr;
+    bool                m_enable_rvc;
 
     // Stats
     enum eStats

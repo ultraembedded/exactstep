@@ -44,22 +44,36 @@
 #define OPCODE_SHAMT_MASK       OPCODE_MAKE_MASK(25,20)
 
 //--------------------------------------------------------------------
-// Instruction Decode Groups
+// RVC decoder (as per Spike)
 //--------------------------------------------------------------------
-// Mask 0x707f
-//   andi, addi, slti, sltiu, ori, xori, jalr, beq, bne, blt, bge, bltu, bgeu, lb, lh, lw, lbu, lhu, lwu, sb, sh, sw, csrrs, csrrc, csrrsi, csrrci
+class rvc_decode
+{
+public:
+  rvc_decode(uint64_t opcode) { m_opc = opcode; }
 
-// Mask 0xffffffff
-//   scall, sbreak, sret
-
-// Mask 0xfe00707f
-//   add, sub, slt, sltu, xor, or, and, sll, srl, sra, mul, mulh, mulhsu, mulhu, div, divu, rem, remu
-
-// Mask 0xfc00707f
-//   slli, srli, srai
-
-// Mask 0x7f
-//   lui, auipc, jal
+  uint64_t rd()           { return x(7, 5); }
+  uint64_t rs1()          { return x(7, 5); }
+  uint64_t rs2()          { return x(2, 5); }
+  uint64_t rs1s()         { return 8 + x(7, 3); }
+  uint64_t rs2s()         { return 8 + x(2, 3); }
+  int64_t  imm()          { return x(2, 5) + (xs(12, 1) << 5); }
+  int64_t  zimm()         { return x(2, 5) + (x(12, 1) << 5); }
+  int64_t  addi4spn_imm() { return (x(6, 1) << 2) + (x(5, 1) << 3) + (x(11, 2) << 4) + (x(7, 4) << 6); }
+  int64_t  addi16sp_imm() { return (x(6, 1) << 4) + (x(2, 1) << 5) + (x(5, 1) << 6) + (x(3, 2) << 7) + (xs(12, 1) << 9); }
+  int64_t  lwsp_imm()     { return (x(4, 3) << 2) + (x(12, 1) << 5) + (x(2, 2) << 6); }
+  int64_t  ldsp_imm()     { return (x(5, 2) << 3) + (x(12, 1) << 5) + (x(2, 3) << 6); }
+  int64_t  swsp_imm()     { return (x(9, 4) << 2) + (x(7, 2) << 6); }
+  int64_t  sdsp_imm()     { return (x(10, 3) << 3) + (x(7, 3) << 6); }
+  int64_t  lw_imm()       { return (x(6, 1) << 2) + (x(10, 3) << 3) + (x(5, 1) << 6); }
+  int64_t  ld_imm()       { return (x(10, 3) << 3) + (x(5, 2) << 6); }
+  int64_t  j_imm()        { return (x(3, 3) << 1) + (x(11, 1) << 4) + (x(2, 1) << 5) + (x(7, 1) << 6) + (x(6, 1) << 7) + (x(9, 2) << 8) + (x(8, 1) << 10) + (xs(12, 1) << 11); }
+  int64_t  b_imm()        { return (x(3, 2) << 1) + (x(10, 2) << 3) + (x(2, 1) << 5) + (x(5, 2) << 6) + (xs(12, 1) << 8); }
+  int64_t  simm3()        { return x(10, 3); }
+private:
+  uint64_t m_opc;
+  uint64_t x(int lo, int len) { return (m_opc >> lo) & ((uint64_t(1) << len)-1); }
+  uint64_t xs(int lo, int len) { return int64_t(m_opc) << (64-lo-len) >> (64-len); }
+};
 
 //--------------------------------------------------------------------
 // Instructions
@@ -434,24 +448,6 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 #define INST_WFI 0x10500073
 #define INST_WFI_MASK 0xffff8fff
 
-#define IS_LOAD_INST(a)     (((a) & 0x7F) == 0x03)
-#define IS_STORE_INST(a)    ((((a) & INST_SB_MASK) == INST_SB) || \
-                            (((a) & INST_SH_MASK) == INST_SH)  || \
-                            (((a) & INST_SW_MASK) == INST_SW))
-#define IS_BRANCH_INST(a)   ((((a) & 0x7F) == 0x6f) || \
-                            (((a) & 0x7F) == 0x67) || \
-                            (((a) & 0x7F) == 0x63) || \
-                            (((a) & INST_ECALL_MASK) == INST_ECALL) || \
-                            (((a) & INST_EBREAK_MASK) == INST_EBREAK) || \
-                            (((a) & INST_MRET_MASK) == INST_MRET))
-
-#define IS_ALU_3R_INST(a)           (((a) & 0x7F) == 0x33)
-#define IS_ALU_2RI_INST(a)          ((((a) & 0x7F) == 0x13) || (((a) & 0x7F) == 0x67))
-#define IS_COND_BRANCH_2RI_INST(a)  (((a) & 0x7F) == 0x63)
-#define IS_RD_I_INST(a)     (((a) & INST_JAL_MASK) == INST_JAL) || \
-                            (((a) & INST_LUI_MASK) == INST_LUI) || \
-                            (((a) & INST_AUIPC_MASK) == INST_AUIPC))
-
 //--------------------------------------------------------------------
 // Privilege levels
 //--------------------------------------------------------------------
@@ -632,7 +628,13 @@ enum eRegisters
     RISCV_REGNO_CSR0    = 65,
     RISCV_REGNO_CSR4095 = RISCV_REGNO_CSR0 + 4095,
     RISCV_REGNO_PRIV    = 4161,
-    RISCV_REGNO_COUNT
+    RISCV_REGNO_COUNT,
+
+    RISCV_REG_RA        = 1,
+    RISCV_REG_SP        = 2,
+    RISCV_REG_GP        = 3,
+    RISCV_REG_TP        = 4,
+    RISCV_REG_A0        = 10
 };
 
 //--------------------------------------------------------------------
