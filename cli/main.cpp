@@ -17,8 +17,10 @@
 #include "bin_load.h"
 
 #include "platform_armv6m_basic.h"
-#include "platform_rv32im_basic.h"
-#include "platform_rv64im_basic.h"
+#include "platform_rv32_basic.h"
+#include "platform_rv32_virt.h"
+#include "platform_rv64_basic.h"
+
 #include "platform_device_tree.h"
 
 static volatile bool m_user_abort = false;
@@ -34,6 +36,55 @@ static void sigint_handler(int s)
         exit(0);
     }
     m_user_abort = true;
+}
+//-----------------------------------------------------------------
+// create_dump_file: Create memory dump file
+//-----------------------------------------------------------------
+static bool create_dump_file(cpu *sim, const char *dump_file, uint32_t dump_start, uint32_t dump_end)
+{
+    int  dump_size  = dump_end - dump_start;
+
+    // Nothing to do...
+    if (dump_size <= 0 || !dump_file)
+        return false;
+
+    const char *ext = strrchr(dump_file, '.');
+    bool sig_txt_file = ext && !strcmp(ext, ".output");
+
+    printf("Dumping post simulation memory: 0x%08x-0x%08x (%d bytes) [%s]\n", dump_start, dump_end, dump_size, dump_file);
+
+    uint8_t *buffer = new uint8_t[dump_size];
+    for (uint32_t i=0;i<dump_size;i++)
+        buffer[i] = sim->read(dump_start + i);
+
+    // Binary block
+    if (!sig_txt_file)
+    {
+        // Write file data
+        FILE *f = fopen(dump_file, "wb");
+        if (f)
+        {
+            fwrite(buffer, 1, dump_size, f);
+            fclose(f);
+        }
+    }
+    // Signature text file
+    else
+    {
+        // Write file data
+        FILE *f = fopen(dump_file, "w");
+        if (f)
+        {
+            uint32_t *w = (uint32_t*)buffer;
+            for (int r=0;r<(dump_size/4);r++)
+                fprintf(f, "%08x\n", *w++);
+            fclose(f);
+        }
+    }
+
+    delete buffer;
+    buffer = NULL;
+    return true;
 }
 //-----------------------------------------------------------------
 // main
@@ -53,9 +104,14 @@ int main(int argc, char *argv[])
     bool           explicit_mem   = false;
     const char *   device_blob    = NULL;
     const char *   platform_name  = NULL;
+    char *         dump_file      = NULL;
+    char *         dump_sym_start = NULL;
+    char *         dump_sym_end   = NULL;
+    uint32_t       dump_start     = 0;
+    uint32_t       dump_end       = 0;
     int c;
 
-    while ((c = getopt (argc, argv, "t:v:f:c:r:b:s:e:D:P:")) != -1)
+    while ((c = getopt (argc, argv, "t:v:f:c:r:b:s:e:D:P:p:j:k:")) != -1)
     {
         switch(c)
         {
@@ -91,6 +147,21 @@ int main(int argc, char *argv[])
             case 'P':
                 platform_name = optarg;
                 break;
+            case 'p':
+                dump_file = optarg;
+                break;
+            case 'j':
+                if (!strncmp(optarg, "0x", 2))
+                    dump_start = strtoul(optarg, NULL, 0);
+                else
+                    dump_sym_start = optarg;
+                break;
+            case 'k':
+                if (!strncmp(optarg, "0x", 2))
+                    dump_end = strtoul(optarg, NULL, 0);
+                else
+                    dump_sym_end = optarg;
+                break;
             case '?':
             default:
                 help = 1;   
@@ -102,7 +173,7 @@ int main(int argc, char *argv[])
     {
         fprintf (stderr,"Usage:\n");
         fprintf (stderr,"-f filename.bin/elf = Executable to load\n");
-        fprintf (stderr,"-P platform         = (Optional) Platform to simulate (rv32im-basic|rv64im-basic|armv6m-basic)\n");
+        fprintf (stderr,"-P platform         = (Optional) Platform to simulate (rv32-basic|rv64-basic|armv6m-basic)\n");
         fprintf (stderr,"-D device.dtb       = (Optional) Device tree blob (binary)\n");
         fprintf (stderr,"-t                  = (Optional) Enable program trace\n");
         fprintf (stderr,"-v 0xX              = (Optional) Trace Mask\n");
@@ -111,20 +182,28 @@ int main(int argc, char *argv[])
         fprintf (stderr,"-e 0xnnnn           = (Optional) Trace from PC address\n");
         fprintf (stderr,"-b 0xnnnn           = (Optional) Memory base address (for binary loads)\n");
         fprintf (stderr,"-s nnnn             = (Optional) Memory size (for binary loads)\n");
+        fprintf (stderr,"-p dumpfile.bin     = (Optional) Post simulation memory dump file\n");
+        fprintf (stderr,"-j sym/hex_addr     = (Optional) Symbol for memory dump start (or 0xaddr)\n");
+        fprintf (stderr,"-k sym/hex_addr     = (Optional) Symbol for memory dump end (or 0xaddr)\n");
         exit(-1);
     }
 
     console_io *con = new console();
 
     if (!platform_name)
-        platform_name = "rv32im-basic"; 
+        platform_name = "rv32-basic"; 
 
     // Resolve platform
     platform * plat = NULL;
 
     // Device tree blob
     if (device_blob)
-        plat = new platform_device_tree(device_blob, con);
+    {
+        if (!strcmp(platform_name, "rv32-virt"))
+            plat = new platform_rv32_virt(device_blob, con);
+        else
+            plat = new platform_device_tree(device_blob, con);
+    }
     else if (!strcmp(platform_name, "armv6m-basic"))
     {
         if (!explicit_mem)
@@ -135,14 +214,16 @@ int main(int argc, char *argv[])
 
         plat = new platform_armv6m_basic(mem_base, mem_size, con);
     }
-    else if (!strcmp(platform_name, "rv32im-basic"))
-        plat = new platform_rv32im_basic(0, 0, con);
-    else if (!strcmp(platform_name, "rv64im-basic"))
-        plat = new platform_rv64im_basic(0, 0, con);
+    else if (!strcmp(platform_name, "rv32-basic"))
+        plat = new platform_rv32_basic(0, 0, con);
+    else if (!strcmp(platform_name, "rv32-virt"))
+        plat = new platform_rv32_virt("", con);
+    else if (!strcmp(platform_name, "rv64-basic"))
+        plat = new platform_rv64_basic(0, 0, con);
     else
     {
         fprintf (stderr,"Error: Unsupported platform\n");
-        fprintf (stderr,"Supported: armv6m-basic, rv32im-basic, rv64im-basic\n");
+        fprintf (stderr,"Supported: armv6m-basic, rv32-basic, rv32-virt, rv64-basic\n");
         exit(-1);
     }
 
@@ -186,6 +267,13 @@ int main(int argc, char *argv[])
         // Find boot vectors if ELF file
         if (!elf.get_symbol("vectors", start_addr))
             start_addr = elf.get_entry_point();
+
+        // Lookup memory dump addresses?
+        uint32_t sym_addr;
+        if (dump_sym_start && elf.get_symbol(dump_sym_start, sym_addr))
+            dump_start = sym_addr;
+        if (dump_sym_end && elf.get_symbol(dump_sym_end, sym_addr))
+            dump_end = sym_addr;
     }
 
     // Reset CPU to given start PC
@@ -215,11 +303,16 @@ int main(int argc, char *argv[])
         if (trace_pc == current_pc)
             sim->enable_trace(trace_mask);
     }
+
     // Fault occurred?
     if (sim->get_fault())
         return 1;
     else
     {
+        // Dump memory contents after execution?
+        if (dump_file)
+            create_dump_file(sim, dump_file, dump_start, dump_end);
+
         sim->stats_dump();
         return 0;
     }

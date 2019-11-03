@@ -31,9 +31,10 @@
 //-----------------------------------------------------------------
 rv32::rv32(uint32_t baseAddr /*= 0*/, uint32_t len /*= 0*/): cpu()
 {
-    m_enable_mem_errors  = false;
+    m_enable_mem_errors  = true;
     m_compliant_csr      = false;
     m_enable_rvc         = true;
+    m_enable_rva         = true;
 
     // Some memory defined
     if (len != 0)
@@ -60,6 +61,7 @@ void rv32::set_register(int r, uint32_t val)
     else if (r == (RISCV_REGNO_CSR0 + CSR_MCAUSE)) m_csr_mcause = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MSTATUS)) m_csr_msr = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MTVEC)) m_csr_mevec = val;
+    else if (r == (RISCV_REGNO_CSR0 + CSR_MTVAL)) m_csr_mtval = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIE)) m_csr_mie = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIP)) m_csr_mip = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MTIME)) m_csr_mtime = val;
@@ -87,6 +89,7 @@ uint32_t rv32::get_register(int r)
     else if (r == (RISCV_REGNO_CSR0 + CSR_MCAUSE)) return m_csr_mcause;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MSTATUS)) return m_csr_msr;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MTVEC)) return m_csr_mevec;
+    else if (r == (RISCV_REGNO_CSR0 + CSR_MTVAL)) return m_csr_mtval;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIE)) return m_csr_mie;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIP)) return m_csr_mip;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MCYCLE)) return m_csr_mtime;
@@ -112,6 +115,7 @@ void rv32::reset(uint32_t start_addr)
 {
     m_pc        = start_addr;
     m_pc_x      = start_addr;
+    m_load_res  = 0;
 
     for (int i=0;i<REGISTERS;i++)
         m_gpr[i] = 0;
@@ -126,6 +130,7 @@ void rv32::reset(uint32_t start_addr)
     m_csr_mip      = 0;
     m_csr_mcause   = 0;
     m_csr_mevec    = 0;
+    m_csr_mtval    = 0;
     m_csr_mtime    = 0;
     m_csr_mtimecmp = 0;
     m_csr_mscratch = 0;
@@ -345,15 +350,24 @@ int rv32::mmu_i_translate(uint32_t addr, uint32_t *physical)
 int rv32::mmu_d_translate(uint32_t pc, uint32_t addr, uint32_t *physical, int writeNotRead)
 {
     bool page_fault = false;
+    uint32_t priv = m_csr_mpriv;
+
+    // Modify data access privilege level (allows machine mode to use MMU)
+    if (m_csr_msr & SR_MPRV)
+        priv = SR_GET_MPP(m_csr_msr);
 
     // Machine - no MMU
-    if (m_csr_mpriv > PRIV_SUPER)
+    if (priv > PRIV_SUPER)
     {
         *physical = addr;
         return 1; 
     }
 
     uint32_t pte = mmu_walk(addr);
+
+    // MXR: Loads from pages marked either readable or executable (R=1 or X=1) will succeed.
+    if ((m_csr_msr & SR_MXR) && (pte & PAGE_EXEC))
+        pte |= PAGE_READ;
 
     // Reserved configurations
     if (((pte & (PAGE_EXEC | PAGE_READ | PAGE_WRITE)) == PAGE_WRITE) ||
@@ -362,7 +376,7 @@ int rv32::mmu_d_translate(uint32_t pc, uint32_t addr, uint32_t *physical, int wr
         page_fault = true;
     }
     // Supervisor mode
-    else if (m_csr_mpriv == PRIV_SUPER)
+    else if (priv == PRIV_SUPER)
     {
         // User page access - super mode access not enabled
         if ((pte & PAGE_USER) && !(m_csr_msr & SR_SUM))
@@ -567,6 +581,10 @@ bool rv32::access_csr(uint32_t address, uint32_t data, bool set, bool clr, uint3
         }
     }
 
+    uint32_t misa_val = MISA_VALUE;
+    misa_val |= m_enable_rvc ? MISA_RVC : 0;
+    misa_val |= m_enable_rva ? MISA_RVA : 0;
+
     switch (address & 0xFFF)
     {
         //--------------------------------------------------------
@@ -578,7 +596,11 @@ bool rv32::access_csr(uint32_t address, uint32_t data, bool set, bool clr, uint3
                 case CSR_SIM_CTRL_EXIT:
                     stats_dump();
                     printf("Exit code = %d\n", (char)(data & 0xFF));
-                    exit(data & 0xFF);
+                    // Abnormal exit
+                    if (data & 0xFF)
+                        exit(data & 0xFF);
+                    else
+                        m_stopped = true;
                     break;
                 case CSR_SIM_CTRL_PUTC:
                     if (m_console)
@@ -632,11 +654,12 @@ bool rv32::access_csr(uint32_t address, uint32_t data, bool set, bool clr, uint3
         //--------------------------------------------------------
         CSR_STD(MEPC,    m_csr_mepc)
         CSR_STD(MTVEC,   m_csr_mevec)
+        CSR_STD(MTVAL,   m_csr_mtval)
         CSR_STD(MCAUSE,  m_csr_mcause)
         CSR_STD(MSTATUS, m_csr_msr)
         CSR_STD(MIP,     m_csr_mip)
         CSR_STD(MIE,     m_csr_mie)
-        CSR_CONST(MISA,  (m_enable_rvc ? (MISA_RVC | MISA_VALUE) : MISA_VALUE))
+        CSR_CONST(MISA,  misa_val)
         CSR_STD(MIDELEG, m_csr_mideleg)
         CSR_STD(MEDELEG, m_csr_medeleg)
         CSR_STD(MSCRATCH,m_csr_mscratch)
@@ -755,6 +778,7 @@ void rv32::exception(uint32_t cause, uint32_t pc, uint32_t badaddr /*= 0*/)
         m_csr_msr    = s;
         m_csr_mepc   = pc;
         m_csr_mcause = cause;
+        m_csr_mtval  = badaddr;
 
         // Set new PC
         m_pc = m_csr_mevec; // TODO: This should be a product of the except num
@@ -806,7 +830,7 @@ void rv32::execute(void)
     {
         error(false, "Bad instruction @ %x\n", pc);
 
-        exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+        exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
         m_fault = true;
         take_exception = true;        
     }
@@ -1361,7 +1385,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRW);
         take_exception = access_csr(imm12, reg_rs1, true, true, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
         else
             pc += 4;
     }    
@@ -1371,7 +1395,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRS);
         take_exception = access_csr(imm12, reg_rs1, (rs1 != 0), false, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
         else
             pc += 4;
     }
@@ -1381,7 +1405,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRC);
         take_exception = access_csr(imm12, reg_rs1, false, (rs1 != 0), reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
         else
             pc += 4;
     }
@@ -1391,7 +1415,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRWI);
         take_exception = access_csr(imm12, rs1, true, true, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
         else
             pc += 4;
     }
@@ -1401,7 +1425,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRSI);
         take_exception = access_csr(imm12, rs1, (rs1 != 0), false, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
         else
             pc += 4;
     }
@@ -1411,7 +1435,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRCI);
         take_exception = access_csr(imm12, rs1, false, (rs1 != 0), reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
         else
             pc += 4;
     }
@@ -1421,6 +1445,221 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_WFI);
         pc += 4;
     }
+    //-----------------------------------------------------------------
+    // A Extension
+    //-----------------------------------------------------------------
+    else if (m_enable_rva && (opcode & INST_AMOADD_W_MASK) == INST_AMOADD_W)
+    {
+        DPRINTF(LOG_INST,("%08x: amoadd.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+
+        // Read
+        if (!load(pc, reg_rs1, &reg_rd, 4, true))
+            return;
+
+        // Modify
+        uint32_t val = reg_rd + reg_rs2;
+
+        // Write
+        if (!store(pc, reg_rs1, val, 4))
+            return ;
+
+        INST_STAT(ENUM_INST_ADD);
+        INST_STAT(ENUM_INST_LW);
+        INST_STAT(ENUM_INST_SW);
+        pc += 4;
+    }
+    else if (m_enable_rva && (opcode & INST_AMOXOR_W_MASK) == INST_AMOXOR_W)
+    {
+        DPRINTF(LOG_INST,("%08x: amoxor.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+
+        // Read
+        if (!load(pc, reg_rs1, &reg_rd, 4, true))
+            return;
+
+        // Modify
+        uint32_t val = reg_rd ^ reg_rs2;
+
+        // Write
+        if (!store(pc, reg_rs1, val, 4))
+            return ;
+
+        INST_STAT(ENUM_INST_XOR);
+        INST_STAT(ENUM_INST_LW);
+        INST_STAT(ENUM_INST_SW);
+        pc += 4;
+    }
+    else if (m_enable_rva && (opcode & INST_AMOOR_W_MASK) == INST_AMOOR_W)
+    {
+        DPRINTF(LOG_INST,("%08x: amoor.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+
+        // Read
+        if (!load(pc, reg_rs1, &reg_rd, 4, true))
+            return;
+
+        // Modify
+        uint32_t val = reg_rd | reg_rs2;
+
+        // Write
+        if (!store(pc, reg_rs1, val, 4))
+            return ;
+
+        INST_STAT(ENUM_INST_OR);
+        INST_STAT(ENUM_INST_LW);
+        INST_STAT(ENUM_INST_SW);
+        pc += 4;
+    }
+    else if (m_enable_rva && (opcode & INST_AMOAND_W_MASK) == INST_AMOAND_W)
+    {
+        DPRINTF(LOG_INST,("%08x: amoand.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+
+        // Read
+        if (!load(pc, reg_rs1, &reg_rd, 4, true))
+            return;
+
+        // Modify
+        uint32_t val = reg_rd & reg_rs2;
+
+        // Write
+        if (!store(pc, reg_rs1, val, 4))
+            return ;
+
+        INST_STAT(ENUM_INST_AND);
+        INST_STAT(ENUM_INST_LW);
+        INST_STAT(ENUM_INST_SW);
+        pc += 4;
+    }
+    else if (m_enable_rva && (opcode & INST_AMOMIN_W_MASK) == INST_AMOMIN_W)
+    {
+        DPRINTF(LOG_INST,("%08x: amomin.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+
+        // Read
+        if (!load(pc, reg_rs1, &reg_rd, 4, true))
+            return;
+
+        // Modify
+        uint32_t val = reg_rs2;
+        if ((int32_t)reg_rd < (int32_t)reg_rs2)
+            val = reg_rd;
+
+        // Write
+        if (!store(pc, reg_rs1, val, 4))
+            return ;
+
+        INST_STAT(ENUM_INST_LW);
+        INST_STAT(ENUM_INST_SW);
+        pc += 4;
+    }
+    else if (m_enable_rva && (opcode & INST_AMOMAX_W_MASK) == INST_AMOMAX_W)
+    {
+        DPRINTF(LOG_INST,("%08x: amomax.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+
+        // Read
+        if (!load(pc, reg_rs1, &reg_rd, 4, true))
+            return;
+
+        // Modify
+        uint32_t val = reg_rs2;
+        if ((int32_t)reg_rd > (int32_t)reg_rs2)
+            val = reg_rd;
+
+        // Write
+        if (!store(pc, reg_rs1, val, 4))
+            return ;
+
+        INST_STAT(ENUM_INST_LW);
+        INST_STAT(ENUM_INST_SW);
+        pc += 4;
+    }
+    else if (m_enable_rva && (opcode & INST_AMOMINU_W_MASK) == INST_AMOMINU_W)
+    {
+        DPRINTF(LOG_INST,("%08x: amominu.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+
+        // Read
+        if (!load(pc, reg_rs1, &reg_rd, 4, true))
+            return;
+
+        // Modify
+        uint32_t val = reg_rs2;
+        if ((uint32_t)reg_rd < (uint32_t)reg_rs2)
+            val = reg_rd;
+
+        // Write
+        if (!store(pc, reg_rs1, val, 4))
+            return ;
+
+        INST_STAT(ENUM_INST_LW);
+        INST_STAT(ENUM_INST_SW);
+        pc += 4;
+    }
+    else if (m_enable_rva && (opcode & INST_AMOMAXU_W_MASK) == INST_AMOMAXU_W)
+    {
+        DPRINTF(LOG_INST,("%08x: amomaxu.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+
+        // Read
+        if (!load(pc, reg_rs1, &reg_rd, 4, true))
+            return;
+
+        // Modify
+        uint32_t val = reg_rs2;
+        if ((uint32_t)reg_rd > (uint32_t)reg_rs2)
+            val = reg_rd;
+
+        // Write
+        if (!store(pc, reg_rs1, val, 4))
+            return ;
+
+        INST_STAT(ENUM_INST_LW);
+        INST_STAT(ENUM_INST_SW);
+        pc += 4;
+    }
+    else if (m_enable_rva && (opcode & INST_AMOSWAP_W_MASK) == INST_AMOSWAP_W)
+    {
+        DPRINTF(LOG_INST,("%08x: amoswap.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+
+        // Read
+        if (!load(pc, reg_rs1, &reg_rd, 4, true))
+            return;
+
+        // Write
+        if (!store(pc, reg_rs1, reg_rs2, 4))
+            return ;
+
+        INST_STAT(ENUM_INST_LW);
+        INST_STAT(ENUM_INST_SW);
+        pc += 4;
+    }
+    else if (m_enable_rva && (opcode & INST_LR_W_MASK) == INST_LR_W)
+    {
+        DPRINTF(LOG_INST,("%08x: lr.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+        if (!load(pc, reg_rs1, &reg_rd, 4, true))
+            return;
+
+        // Record load address
+        m_load_res = reg_rs1;
+
+        INST_STAT(ENUM_INST_LW);
+        pc += 4;
+    }
+    else if (m_enable_rva && (opcode & INST_SC_W_MASK) == INST_SC_W)
+    {
+        DPRINTF(LOG_INST,("%08x: sc.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
+        if (m_load_res == reg_rs1)
+        {
+            // Write
+            if (!store(pc, reg_rs1, reg_rs2, 4))
+                return ;
+
+            reg_rd = 0;
+        }
+        else
+            reg_rd = 1;
+
+        INST_STAT(ENUM_INST_SW);
+        pc += 4;
+    }
+    //-----------------------------------------------------------------
+    // C Extension
+    //-----------------------------------------------------------------
     // RVC - Quadrant 0
     else if (m_enable_rvc && ((opcode & 3) == 0))
     {
@@ -1460,7 +1699,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 3)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1482,7 +1721,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 7)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1567,7 +1806,7 @@ void rv32::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1647,7 +1886,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x7) == 7 && ((opcode >> 5) & 0x3) == 0)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1655,7 +1894,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x7) == 7 && ((opcode >> 5) & 0x3) == 1)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1697,7 +1936,7 @@ void rv32::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1741,7 +1980,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 3)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1824,7 +2063,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 7)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1832,7 +2071,7 @@ void rv32::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1840,7 +2079,7 @@ void rv32::execute(void)
     else
     {
         error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-        exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+        exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
         m_fault        = true;
         take_exception = true;
     }
@@ -1922,8 +2161,20 @@ void rv32::step(void)
 //-----------------------------------------------------------------
 void rv32::set_interrupt(int irq)
 {
-    assert(irq == 0);
-    m_csr_mip |= (SR_IP_MEIP | SR_IP_SEIP);
+    assert(irq == IRQ_M_EXT || irq == IRQ_M_TIMER);
+    if (irq == IRQ_M_EXT)
+        m_csr_mip |= (SR_IP_MEIP | SR_IP_SEIP);
+    else
+        m_csr_mip |= SR_IP_MTIP;
+}
+//-----------------------------------------------------------------
+// clr_interrupt: Clear interrupt pending
+//-----------------------------------------------------------------
+void rv32::clr_interrupt(int irq)
+{
+    assert(irq == IRQ_M_TIMER);
+    if (irq == IRQ_M_TIMER)
+        m_csr_mip &= ~SR_IP_MTIP;
 }
 //-----------------------------------------------------------------
 // stats_reset: Reset runtime stats

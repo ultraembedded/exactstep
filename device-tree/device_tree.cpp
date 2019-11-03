@@ -23,7 +23,9 @@ extern "C"
 #include "device_spi_lite.h"
 #include "device_timer_r5.h"
 #include "device_timer_owl.h"
+#include "device_timer_clint.h"
 #include "device_irq_ctrl.h"
+#include "device_irq_plic.h"
 #include "device_dummy.h"
 
 //-----------------------------------------------------------------
@@ -167,7 +169,13 @@ bool device_tree::load(void)
                 {
                     // Create IRQ controller
                     // TODO: Support multiple controllers
-                    irq_ctrl = new device_irq_ctrl(reg_addr, 0);
+                    irq_ctrl = new device_irq_ctrl(reg_addr, 11);
+                    printf("|- Create interrupt controller: Addr %08x\n", reg_addr);
+                    attach_device(irq_ctrl);
+                }
+                else if (!strcmp(compat, "riscv,plic0"))
+                {
+                    irq_ctrl = new device_irq_plic(reg_addr, 0);
                     printf("|- Create interrupt controller: Addr %08x\n", reg_addr);
                     attach_device(irq_ctrl);
                 }
@@ -185,6 +193,12 @@ bool device_tree::load(void)
                 {
                     printf("|- Create Timer: Addr %08x IRQ %d\n", reg_addr, irq_num);
                     attach_device(new device_timer_r5(reg_addr, irq_ctrl, irq_num));
+                }
+                else if (!strcmp(compat, "riscv,clint0"))
+                {
+                    // TODO: dual irq numbers...
+                    printf("|- Create Timer: Addr %08x IRQ %d\n", reg_addr, irq_num);
+                    attach_device(new device_timer_clint(reg_addr, NULL)); // TODO:
                 }
                 else if (!strcmp(compat, "xlnx,xps-spi-2.00.b"))
                 {

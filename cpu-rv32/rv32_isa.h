@@ -449,6 +449,32 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 #define INST_WFI_MASK 0xffff8fff
 
 //--------------------------------------------------------------------
+// RISC-V Atomic Instrcutions
+//--------------------------------------------------------------------
+#define INST_AMOADD_W 0x202f
+#define INST_AMOADD_W_MASK  0xf800707f
+#define INST_AMOXOR_W 0x2000202f
+#define INST_AMOXOR_W_MASK  0xf800707f
+#define INST_AMOOR_W 0x4000202f
+#define INST_AMOOR_W_MASK  0xf800707f
+#define INST_AMOAND_W 0x6000202f
+#define INST_AMOAND_W_MASK  0xf800707f
+#define INST_AMOMIN_W 0x8000202f
+#define INST_AMOMIN_W_MASK  0xf800707f
+#define INST_AMOMAX_W 0xa000202f
+#define INST_AMOMAX_W_MASK  0xf800707f
+#define INST_AMOMINU_W 0xc000202f
+#define INST_AMOMINU_W_MASK  0xf800707f
+#define INST_AMOMAXU_W 0xe000202f
+#define INST_AMOMAXU_W_MASK  0xf800707f
+#define INST_AMOSWAP_W 0x800202f
+#define INST_AMOSWAP_W_MASK  0xf800707f
+#define INST_LR_W 0x1000202f
+#define INST_LR_W_MASK  0xf9f0707f
+#define INST_SC_W 0x1800202f
+#define INST_SC_W_MASK  0xf800707f
+
+//--------------------------------------------------------------------
 // Privilege levels
 //--------------------------------------------------------------------
 #define PRIV_USER         0
@@ -475,7 +501,9 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 
 #define SR_GET_MPP(val) (((val) >> SR_MPP_SHIFT) & SR_MPP_MASK)
 
+#define SR_MXR          (1 << 19)
 #define SR_SUM          (1 << 18)
+#define SR_MPRV         (1 << 17)
 
 #define SR_SMODE_MASK   (SR_UIE | SR_SIE | SR_UPIE | SR_SPIE | SR_SPP | SR_SUM)
 
@@ -542,8 +570,8 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 #define CSR_MEPC_MASK     0xFFFFFFFF
 #define CSR_MCAUSE        0x342
 #define CSR_MCAUSE_MASK   0x8000000F
-//#define CSR_MTVAL       0x343
-//#define CSR_MTVAL_MASK  0xFFFFFFFF
+#define CSR_MTVAL         0x343
+#define CSR_MTVAL_MASK    0xFFFFFFFF
 #define CSR_MIP           0x344
 #define CSR_MIP_MASK      IRQ_MASK
 #define CSR_MCYCLE        0xc00

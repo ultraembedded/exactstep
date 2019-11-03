@@ -1804,7 +1804,11 @@ void armv6m::armv6m_execute(uint16_t inst, uint16_t inst2)
             {
                 // Instruction used for program exit
                 printf("Exit code = %d\n", m_imm);
-                exit(m_imm);
+                // Abnormal exit
+                if (m_imm)
+                    exit(m_imm);
+                else
+                    m_stopped = true;
             }
             break;
             // CMP - CMP <Rn>,<Rm> <Rn> and <Rm> not both from R0-R7

@@ -81,6 +81,7 @@ public:
 
     // Trigger interrupt
     virtual void      set_interrupt(int irq) = 0;
+    virtual void      clr_interrupt(int irq) = 0;
 
     // Instruction trace
     virtual void      enable_trace(uint32_t mask) { m_trace = mask; }

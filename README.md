@@ -35,7 +35,7 @@ $ make
 ```
 Usage:
 -f filename.bin/elf = Executable to load
--P platform         = (Optional) Platform to simulate (rv32im-basic|rv64im-basic|armv6m-basic)
+-P platform         = (Optional) Platform to simulate (rv32-basic|rv64-basic|armv6m-basic)
 -D device.dtb       = (Optional) Device tree blob (binary)
 -t                  = (Optional) Enable program trace
 -v 0xX              = (Optional) Trace Mask
@@ -44,6 +44,9 @@ Usage:
 -e 0xnnnn           = (Optional) Trace from PC address
 -b 0xnnnn           = (Optional) Memory base address (for binary loads)
 -s nnnn             = (Optional) Memory size (for binary loads)
+-p dumpfile.bin     = (Optional) Post simulation memory dump file
+-j sym/hex_addr     = (Optional) Symbol for memory dump start (or 0xaddr)
+-k sym/hex_addr     = (Optional) Symbol for memory dump end (or 0xaddr)
 ```
 
 The default architecture is a RV32-IM CPU model. To run a basic ELF;

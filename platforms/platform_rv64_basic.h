@@ -5,8 +5,8 @@
 //                     Copyright 2014-2019
 //                    License: BSD 3-Clause
 //-----------------------------------------------------------------
-#ifndef __PLATFORM_RV64IM_BASIC_H__
-#define __PLATFORM_RV64IM_BASIC_H__
+#ifndef __PLATFORM_RV64_BASIC_H__
+#define __PLATFORM_RV64_BASIC_H__
 
 #include "platform.h"
 #include "rv64.h"
@@ -25,16 +25,16 @@
 #define CONFIG_SPILITE_BASE           0x93000000
 #define CONFIG_SPILITE_IRQ            2
 
-class platform_rv64im_basic: public platform
+class platform_rv64_basic: public platform
 {
 public:
-    platform_rv64im_basic(uint32_t membase, uint32_t memsize, console_io *con_io = NULL)
+    platform_rv64_basic(uint32_t membase, uint32_t memsize, console_io *con_io = NULL)
     {
         printf("Platform: Select RV64\n");
         m_cpu = new rv64(membase, memsize);
 
         // Create IRQ controller
-        device *irq_ctrl = new device_irq_ctrl(CONFIG_IRQCTRL_BASE, 0);
+        device *irq_ctrl = new device_irq_ctrl(CONFIG_IRQCTRL_BASE, 11);
         m_cpu->attach_device(irq_ctrl);
 
         // Timer

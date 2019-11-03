@@ -19,6 +19,7 @@ public:
     void                step(void);
 
     void                set_interrupt(int irq);
+    void                clr_interrupt(int irq) { }
 
     uint32_t            get_register(int r);
     uint64_t            get_register64(int r);
@@ -46,6 +47,10 @@ public:
     // Number of registers (max) used for args
     int                 get_abi_reg_num(void) { return 8; }
 
+    // Enable / Disable ISA extensions
+    void                enable_rvc(bool en) { m_enable_rvc = en; }
+    void                enable_rva(bool en) { m_enable_rva = en; }
+
     enum eStats
     { 
         STATS_MIN,
@@ -69,6 +74,7 @@ private:
     uint64_t            m_gpr[32];
     uint64_t            m_pc;
     uint64_t            m_pc_x;
+    uint64_t            m_load_res;
 
     // CSR - Machine
     uint64_t            m_csr_mepc;
@@ -95,6 +101,8 @@ private:
     // Settings
     bool                m_enable_mem_errors;
     bool                m_compliant_csr;
+    bool                m_enable_rvc;
+    bool                m_enable_rva;
 
     // Stats
     uint32_t            m_stats[STATS_MAX];

@@ -27,6 +27,7 @@ public:
     void                step(void);
 
     void                set_interrupt(int irq);
+    void                clr_interrupt(int irq) { }
 
     bool                get_reg_valid(int r) { return true; }
     uint32_t            get_register(int r);
