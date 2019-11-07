@@ -82,6 +82,7 @@ private:
     uint64_t            m_csr_msr;
     uint64_t            m_csr_mpriv;
     uint64_t            m_csr_mevec;
+    uint64_t            m_csr_mtval;
     uint64_t            m_csr_mie;
     uint64_t            m_csr_mip;
     uint64_t            m_csr_mtime;

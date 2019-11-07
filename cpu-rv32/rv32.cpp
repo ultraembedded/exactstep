@@ -659,7 +659,7 @@ bool rv32::access_csr(uint32_t address, uint32_t data, bool set, bool clr, uint3
         CSR_STD(MSTATUS, m_csr_msr)
         CSR_STD(MIP,     m_csr_mip)
         CSR_STD(MIE,     m_csr_mie)
-        CSR_CONST(MISA,  misa_val)
+        CSR_STD(MISA,    misa_val)
         CSR_STD(MIDELEG, m_csr_mideleg)
         CSR_STD(MEDELEG, m_csr_medeleg)
         CSR_STD(MSCRATCH,m_csr_mscratch)
@@ -710,6 +710,10 @@ bool rv32::access_csr(uint32_t address, uint32_t data, bool set, bool clr, uint3
             error(false, "*** CSR address not supported %08x [PC=%08x]\n", address, m_pc);
             break;
     }
+
+    m_enable_rvc = (misa_val & MISA_RVC) ? true : false;
+    m_enable_rva = (misa_val & MISA_RVA) ? true : false;
+
     return false;
 }
 //-----------------------------------------------------------------
@@ -795,6 +799,13 @@ void rv32::execute(void)
     if (!mmu_i_translate(m_pc, &phy_pc))
         return ;
 
+    // Misaligned PC
+    if ((!m_enable_rvc && (m_pc & 3)) || (m_enable_rvc && (m_pc & 1)))
+    {
+        exception(MCAUSE_MISALIGNED_FETCH, m_pc, m_pc);
+        return;
+    }
+
     // Get opcode at current PC
     uint32_t opcode = get_opcode(phy_pc);
     m_pc_x = m_pc;
@@ -830,7 +841,7 @@ void rv32::execute(void)
     {
         error(false, "Bad instruction @ %x\n", pc);
 
-        exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+        exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         m_fault = true;
         take_exception = true;        
     }
@@ -1385,7 +1396,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRW);
         take_exception = access_csr(imm12, reg_rs1, true, true, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }    
@@ -1395,7 +1406,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRS);
         take_exception = access_csr(imm12, reg_rs1, (rs1 != 0), false, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }
@@ -1405,7 +1416,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRC);
         take_exception = access_csr(imm12, reg_rs1, false, (rs1 != 0), reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }
@@ -1415,7 +1426,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRWI);
         take_exception = access_csr(imm12, rs1, true, true, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }
@@ -1425,7 +1436,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRSI);
         take_exception = access_csr(imm12, rs1, (rs1 != 0), false, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }
@@ -1435,7 +1446,7 @@ void rv32::execute(void)
         INST_STAT(ENUM_INST_CSRRCI);
         take_exception = access_csr(imm12, rs1, false, (rs1 != 0), reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }
@@ -1699,7 +1710,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 3)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1721,7 +1732,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 7)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1729,7 +1740,7 @@ void rv32::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1806,7 +1817,7 @@ void rv32::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1886,7 +1897,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x7) == 7 && ((opcode >> 5) & 0x3) == 0)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1894,7 +1905,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 4 && ((opcode >> 10) & 0x7) == 7 && ((opcode >> 5) & 0x3) == 1)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1936,7 +1947,7 @@ void rv32::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1980,7 +1991,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 3)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -2063,7 +2074,7 @@ void rv32::execute(void)
         else if ((opcode >> 13) == 7)
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -2071,7 +2082,7 @@ void rv32::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -2079,7 +2090,7 @@ void rv32::execute(void)
     else
     {
         error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-        exception(MCAUSE_ILLEGAL_INSTRUCTION, opcode);
+        exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         m_fault        = true;
         take_exception = true;
     }

@@ -151,6 +151,7 @@ void rv64::reset(uint32_t start_addr)
     m_csr_mip      = 0;
     m_csr_mcause   = 0;
     m_csr_mevec    = 0;
+    m_csr_mtval    = 0;
     m_csr_mtime    = 0;
     m_csr_mtimecmp = 0;
     m_csr_mscratch = 0;
@@ -427,11 +428,12 @@ bool rv64::access_csr(uint64_t address, uint64_t data, bool set, bool clr, uint6
         //--------------------------------------------------------
         CSR_STD(MEPC,    m_csr_mepc)
         CSR_STD(MTVEC,   m_csr_mevec)
+        CSR_STD(MTVAL,   m_csr_mtval)
         CSR_STD(MCAUSE,  m_csr_mcause)
         CSR_STD(MSTATUS, m_csr_msr)
         CSR_STD(MIP,     m_csr_mip)
         CSR_STD(MIE,     m_csr_mie)
-        CSR_CONST(MISA,  misa_val)
+        CSR_STD(MISA,    misa_val)
         CSR_STD(MIDELEG, m_csr_mideleg)
         CSR_STD(MEDELEG, m_csr_medeleg)
         CSR_STD(MSCRATCH,m_csr_mscratch)
@@ -478,6 +480,10 @@ bool rv64::access_csr(uint64_t address, uint64_t data, bool set, bool clr, uint6
             error(false, "*** CSR address not supported %08x [PC=%08x]\n", address, m_pc);
             break;
     }
+
+    m_enable_rvc = (misa_val & MISA_RVC) ? true : false;
+    m_enable_rva = (misa_val & MISA_RVA) ? true : false;
+
     return false;
 }
 //-----------------------------------------------------------------
@@ -546,6 +552,7 @@ void rv64::exception(uint64_t cause, uint64_t pc, uint64_t badaddr /*= 0*/)
         m_csr_msr    = s;
         m_csr_mepc   = pc;
         m_csr_mcause = cause;
+        m_csr_mtval  = badaddr;
 
         // Set new PC
         m_pc         = m_csr_mevec; // TODO: This should be a product of the except num
@@ -557,6 +564,13 @@ void rv64::exception(uint64_t cause, uint64_t pc, uint64_t badaddr /*= 0*/)
 void rv64::execute(void)
 {
     uint64_t phy_pc = m_pc;
+
+    // Misaligned PC
+    if ((!m_enable_rvc && (m_pc & 3)) || (m_enable_rvc && (m_pc & 1)))
+    {
+        exception(MCAUSE_MISALIGNED_FETCH, m_pc, m_pc);
+        return;
+    }
 
     // Get opcode at current PC
     uint32_t opcode = get_opcode(phy_pc);
@@ -593,7 +607,7 @@ void rv64::execute(void)
     {
         error(false, "Bad instruction @ %x\n", pc);
 
-        exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+        exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         m_fault = true;
         take_exception = true;        
     }
@@ -1140,7 +1154,7 @@ void rv64::execute(void)
         INST_STAT(ENUM_INST_CSRRW);
         take_exception = access_csr(imm12, reg_rs1, true, true, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }    
@@ -1150,7 +1164,7 @@ void rv64::execute(void)
         INST_STAT(ENUM_INST_CSRRS);
         take_exception = access_csr(imm12, reg_rs1, (rs1 != 0), false, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }
@@ -1160,7 +1174,7 @@ void rv64::execute(void)
         INST_STAT(ENUM_INST_CSRRC);
         take_exception = access_csr(imm12, reg_rs1, false, (rs1 != 0), reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }
@@ -1170,7 +1184,7 @@ void rv64::execute(void)
         INST_STAT(ENUM_INST_CSRRWI);
         take_exception = access_csr(imm12, rs1, true, true, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }
@@ -1180,7 +1194,7 @@ void rv64::execute(void)
         INST_STAT(ENUM_INST_CSRRSI);
         take_exception = access_csr(imm12, rs1, (rs1 != 0), false, reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }
@@ -1190,7 +1204,7 @@ void rv64::execute(void)
         INST_STAT(ENUM_INST_CSRRCI);
         take_exception = access_csr(imm12, rs1, false, (rs1 != 0), reg_rd);
         if (take_exception)
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         else
             pc += 4;
     }
@@ -1869,7 +1883,7 @@ void rv64::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -1945,7 +1959,7 @@ void rv64::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -2075,7 +2089,7 @@ void rv64::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -2225,7 +2239,7 @@ void rv64::execute(void)
         else
         {
             error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+            exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
             m_fault        = true;
             take_exception = true;
         }
@@ -2233,7 +2247,7 @@ void rv64::execute(void)
     else
     {
         error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
-        exception(MCAUSE_ILLEGAL_INSTRUCTION, pc);
+        exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
         m_fault        = true;
         take_exception = true;
     }

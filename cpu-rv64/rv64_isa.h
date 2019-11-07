@@ -683,8 +683,8 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 #define CSR_MEPC_MASK     0xFFFFFFFFFFFFFFFFULL
 #define CSR_MCAUSE        0x342
 #define CSR_MCAUSE_MASK   0x8000000F
-//#define CSR_MTVAL       0x343
-//#define CSR_MTVAL_MASK  0xFFFFFFFFFFFFFFFFULL
+#define CSR_MTVAL         0x343
+#define CSR_MTVAL_MASK    0xFFFFFFFFFFFFFFFFULL
 #define CSR_MIP           0x344
 #define CSR_MIP_MASK      IRQ_MASK
 #define CSR_MCYCLE        0xc00
