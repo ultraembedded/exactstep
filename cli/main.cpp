@@ -11,20 +11,62 @@
 #include <assert.h>
 #include <unistd.h>
 #include <signal.h>
+#include <getopt.h>
 
 #include "console.h"
 #include "elf_load.h"
 #include "bin_load.h"
 
-#include "platform_armv6m_basic.h"
-#include "platform_rv32_basic.h"
-#include "platform_rv32_virt.h"
-#include "platform_rv64_basic.h"
-
+#include "platform_basic.h"
+#include "platform_virt.h"
 #include "platform_device_tree.h"
 
 static volatile bool m_user_abort = false;
 
+//-----------------------------------------------------------------
+// Command line options
+//-----------------------------------------------------------------
+#define GETOPTS_ARGS "m:t:v:f:c:r:b:s:e:D:P:p:j:k:h"
+
+static struct option long_options[] =
+{
+    {"trace",      required_argument, 0, 't'},
+    {"trace-mask", required_argument, 0, 'v'},
+    {"stop-pc",    required_argument, 0, 'r'},
+    {"elf",        required_argument, 0, 'f'},
+    {"dtb",        required_argument, 0, 'D'},
+    {"march",      required_argument, 0, 'm'},
+    {"cycles",     required_argument, 0, 'c'},
+    {"mem-base",   required_argument, 0, 'b'},
+    {"mem-size",   required_argument, 0, 's'},
+    {"trace-pc",   required_argument, 0, 'e'},
+    {"platform",   required_argument, 0, 'P'},
+    {"dump-file",  required_argument, 0, 'p'},
+    {"dump-start", required_argument, 0, 'j'},
+    {"dump-end",   required_argument, 0, 'k'},
+    {"help",       no_argument,       0, 'h'},
+    {0, 0, 0, 0}
+};
+
+static void help_options(void)
+{
+    fprintf (stderr,"Usage:\n");
+    fprintf (stderr,"  --elf        | -f FILE       File to load (ELF or BIN)\n");
+    fprintf (stderr,"  --march      | -m MISA       Machine variant (e.g. RV32IMAC, RV64I, ...)\n");
+    fprintf (stderr,"  --platform   | -P PLATFORM   Platform to simulate (basic|virt)\n");
+    fprintf (stderr,"  --dtb        | -D FILE       Device tree blob (binary)\n");
+    fprintf (stderr,"  --trace      | -t 1/0        Enable instruction trace\n");
+    fprintf (stderr,"  --trace-mask | -v 0xXX       Trace mask (verbosity level)\n");
+    fprintf (stderr,"  --cycles     | -c NUM        Max instructions to execute\n");
+    fprintf (stderr,"  --stop-pc    | -r PC         Stop at PC address\n");
+    fprintf (stderr,"  --trace-pc   | -e PC         Trace from PC address\n");
+    fprintf (stderr,"  --mem-base   | -b VAL        Memory base address (for binary loads)\n");
+    fprintf (stderr,"  --mem-size   | -s VAL        Memory size (for binary loads)\n");
+    fprintf (stderr,"  --dump-file  | -p FILE       File to dump memory contents to after completion\n");
+    fprintf (stderr,"  --dump-start | -j SYM/A      Symbol name for memory dump start (or 0xADDR)\n");
+    fprintf (stderr,"  --dump-end   | -k SYM/A      Symbol name for memory dump end (or 0xADDR)\n");
+    exit(-1);
+}
 //-----------------------------------------------------------------
 // sigint_handler: Abort execution
 //-----------------------------------------------------------------
@@ -93,7 +135,8 @@ int main(int argc, char *argv[])
 {
     uint64_t       cycles         = 0;
     int64_t        max_cycles     = (int64_t)-1;
-    char *         filename       = NULL;
+    const char *   filename       = NULL;
+    const char *   march          = NULL;
     int            help           = 0;
     int            trace          = 0;
     uint32_t       trace_mask     = 1;
@@ -111,7 +154,8 @@ int main(int argc, char *argv[])
     uint32_t       dump_end       = 0;
     int c;
 
-    while ((c = getopt (argc, argv, "t:v:f:c:r:b:s:e:D:P:p:j:k:")) != -1)
+    int option_index = 0;
+    while ((c = getopt_long (argc, argv, GETOPTS_ARGS, long_options, &option_index)) != -1)
     {
         switch(c)
         {
@@ -126,6 +170,9 @@ int main(int argc, char *argv[])
                 break;
             case 'f':
                 filename = optarg;
+                break;
+            case 'm':
+                march = optarg;
                 break;
             case 'D':
                 device_blob = optarg;
@@ -170,60 +217,31 @@ int main(int argc, char *argv[])
     }
 
     if (help || (filename == NULL))
-    {
-        fprintf (stderr,"Usage:\n");
-        fprintf (stderr,"-f filename.bin/elf = Executable to load\n");
-        fprintf (stderr,"-P platform         = (Optional) Platform to simulate (rv32-basic|rv64-basic|armv6m-basic)\n");
-        fprintf (stderr,"-D device.dtb       = (Optional) Device tree blob (binary)\n");
-        fprintf (stderr,"-t                  = (Optional) Enable program trace\n");
-        fprintf (stderr,"-v 0xX              = (Optional) Trace Mask\n");
-        fprintf (stderr,"-c nnnn             = (Optional) Max instructions to execute\n");
-        fprintf (stderr,"-r 0xnnnn           = (Optional) Stop at PC address\n");
-        fprintf (stderr,"-e 0xnnnn           = (Optional) Trace from PC address\n");
-        fprintf (stderr,"-b 0xnnnn           = (Optional) Memory base address (for binary loads)\n");
-        fprintf (stderr,"-s nnnn             = (Optional) Memory size (for binary loads)\n");
-        fprintf (stderr,"-p dumpfile.bin     = (Optional) Post simulation memory dump file\n");
-        fprintf (stderr,"-j sym/hex_addr     = (Optional) Symbol for memory dump start (or 0xaddr)\n");
-        fprintf (stderr,"-k sym/hex_addr     = (Optional) Symbol for memory dump end (or 0xaddr)\n");
-        exit(-1);
-    }
+        help_options();
 
     console_io *con = new console();
 
+    if (!march)
+        march = "RV32IMAC";
+
     if (!platform_name)
-        platform_name = "rv32-basic"; 
+        platform_name = "basic"; 
 
     // Resolve platform
     platform * plat = NULL;
 
-    // Device tree blob
+    // Device tree blob specified SoC
     if (device_blob)
-    {
-        if (!strcmp(platform_name, "rv32-virt"))
-            plat = new platform_rv32_virt(device_blob, con);
-        else
-            plat = new platform_device_tree(device_blob, con);
-    }
-    else if (!strcmp(platform_name, "armv6m-basic"))
-    {
-        if (!explicit_mem)
-        {
-            mem_base = 0x20000000;
-            mem_size = 32 << 20;
-        }
-
-        plat = new platform_armv6m_basic(mem_base, mem_size, con);
-    }
-    else if (!strcmp(platform_name, "rv32-basic"))
-        plat = new platform_rv32_basic(0, 0, con);
-    else if (!strcmp(platform_name, "rv32-virt"))
-        plat = new platform_rv32_virt("", con);
-    else if (!strcmp(platform_name, "rv64-basic"))
-        plat = new platform_rv64_basic(0, 0, con);
+        plat = new platform_device_tree(march, device_blob, con);
+    // Basic platform
+    else if (!strcmp(platform_name, "basic"))
+        plat = new platform_basic(march, 0, 0, con);
+    else if (!strcmp(platform_name, "virt"))
+        plat = new platform_virt(march, 0x80000000, (64 << 20), con);
     else
     {
         fprintf (stderr,"Error: Unsupported platform\n");
-        fprintf (stderr,"Supported: armv6m-basic, rv32-basic, rv32-virt, rv64-basic\n");
+        fprintf (stderr,"Supported: basic, virt\n");
         exit(-1);
     }
 
@@ -240,7 +258,7 @@ int main(int argc, char *argv[])
 
     uint32_t start_addr = 0;
 
-    char *ext   = filename ? strrchr(filename, '.') : NULL;
+    const char *ext   = filename ? strrchr(filename, '.') : NULL;
     bool is_bin = ext && !strcmp(ext, ".bin");
 
     // Binary

@@ -26,6 +26,7 @@ rv64::rv64(uint32_t baseAddr /*= 0*/, uint32_t len /*= 0*/): cpu()
 {
     m_enable_mem_errors  = false;
     m_compliant_csr      = false;
+    m_enable_rvm         = true;
     m_enable_rvc         = true;
     m_enable_rva         = true;
 
@@ -988,7 +989,7 @@ void rv64::execute(void)
         // No writeback
         rd = 0;
     }
-    else if ((opcode & INST_MUL_MASK) == INST_MUL)
+    else if (m_enable_rvm && (opcode & INST_MUL_MASK) == INST_MUL)
     {
         // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%08x: mul r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -996,7 +997,7 @@ void rv64::execute(void)
         reg_rd = (int64_t)reg_rs1 * (int64_t)reg_rs2;
         pc += 4;        
     }
-    else if ((opcode & INST_MULH_MASK) == INST_MULH)
+    else if (m_enable_rvm && (opcode & INST_MULH_MASK) == INST_MULH)
     {
         // ['rd', 'rs1', 'rs2']
         long long res = ((long long) (int64_t)reg_rs1) * ((long long)(int64_t)reg_rs2);
@@ -1005,7 +1006,7 @@ void rv64::execute(void)
         reg_rd = (int)(res >> 32);
         pc += 4;
     }
-    else if ((opcode & INST_MULHSU_MASK) == INST_MULHSU)
+    else if (m_enable_rvm && (opcode & INST_MULHSU_MASK) == INST_MULHSU)
     {
         // ['rd', 'rs1', 'rs2']
         long long res = ((long long) (int)reg_rs1) * ((unsigned long long)(unsigned)reg_rs2);
@@ -1014,7 +1015,7 @@ void rv64::execute(void)
         reg_rd = (int)(res >> 32);
         pc += 4;
     }
-    else if ((opcode & INST_MULHU_MASK) == INST_MULHU)
+    else if (m_enable_rvm && (opcode & INST_MULHU_MASK) == INST_MULHU)
     {
         // ['rd', 'rs1', 'rs2']
         unsigned long long res = ((unsigned long long) (unsigned)reg_rs1) * ((unsigned long long)(unsigned)reg_rs2);
@@ -1023,7 +1024,7 @@ void rv64::execute(void)
         reg_rd = (int)(res >> 32);
         pc += 4;
     }
-    else if ((opcode & INST_DIV_MASK) == INST_DIV)
+    else if (m_enable_rvm && (opcode & INST_DIV_MASK) == INST_DIV)
     {
         // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%08x: div r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1036,7 +1037,7 @@ void rv64::execute(void)
             reg_rd = (uint64_t)-1;
         pc += 4;        
     }
-    else if ((opcode & INST_DIVU_MASK) == INST_DIVU)
+    else if (m_enable_rvm && (opcode & INST_DIVU_MASK) == INST_DIVU)
     {
         // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%08x: divu r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1047,7 +1048,7 @@ void rv64::execute(void)
             reg_rd = (uint64_t)-1;
         pc += 4;        
     }
-    else if ((opcode & INST_REM_MASK) == INST_REM)
+    else if (m_enable_rvm && (opcode & INST_REM_MASK) == INST_REM)
     {
         // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%08x: rem r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1061,7 +1062,7 @@ void rv64::execute(void)
             reg_rd = reg_rs1;
         pc += 4;        
     }
-    else if ((opcode & INST_REMU_MASK) == INST_REMU)
+    else if (m_enable_rvm && (opcode & INST_REMU_MASK) == INST_REMU)
     {
         // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%08x: remu r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1327,7 +1328,7 @@ void rv64::execute(void)
         pc += 4;
         DPRINTF(LOG_INST,("%08x: sraw r%d, r%d, r%d\n", pc, rd, rs1, rs2));
     }
-    else if ((opcode & INST_MULW_MASK) == INST_MULW)
+    else if (m_enable_rvm && (opcode & INST_MULW_MASK) == INST_MULW)
     {
         // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%08x: mulw r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1335,7 +1336,7 @@ void rv64::execute(void)
         reg_rd = SEXT32((int64_t)reg_rs1 * (int64_t)reg_rs2);
         pc += 4;        
     }
-    else if ((opcode & INST_DIVW_MASK) == INST_DIVW)
+    else if (m_enable_rvm && (opcode & INST_DIVW_MASK) == INST_DIVW)
     {
         // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%08x: divw r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1346,7 +1347,7 @@ void rv64::execute(void)
             reg_rd = (uint64_t)-1;
         pc += 4;        
     }
-    else if ((opcode & INST_DIVUW_MASK) == INST_DIVUW)
+    else if (m_enable_rvm && (opcode & INST_DIVUW_MASK) == INST_DIVUW)
     {
         // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%08x: divuw r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1357,7 +1358,7 @@ void rv64::execute(void)
             reg_rd = (uint64_t)-1;
         pc += 4;        
     }
-    else if ((opcode & INST_REMW_MASK) == INST_REMW)
+    else if (m_enable_rvm && (opcode & INST_REMW_MASK) == INST_REMW)
     {
         // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%08x: remw r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1369,7 +1370,7 @@ void rv64::execute(void)
             reg_rd = reg_rs1;
         pc += 4;
     }
-    else if ((opcode & INST_REMUW_MASK) == INST_REMUW)
+    else if (m_enable_rvm && (opcode & INST_REMUW_MASK) == INST_REMUW)
     {
         // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%08x: remuw r%d, r%d, r%d\n", pc, rd, rs1, rs2));

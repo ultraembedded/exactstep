@@ -48,6 +48,7 @@ public:
     int                 get_abi_reg_num(void) { return 8; }
 
     // Enable / Disable ISA extensions
+    void                enable_rvm(bool en) { m_enable_rvm = en; }
     void                enable_rvc(bool en) { m_enable_rvc = en; }
     void                enable_rva(bool en) { m_enable_rva = en; }
 
@@ -102,6 +103,7 @@ private:
     // Settings
     bool                m_enable_mem_errors;
     bool                m_compliant_csr;
+    bool                m_enable_rvm;
     bool                m_enable_rvc;
     bool                m_enable_rva;
 
