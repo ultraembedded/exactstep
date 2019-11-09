@@ -58,7 +58,7 @@ protected:
     void                execute(void);
     int                 load(uint32_t pc, uint32_t address, uint32_t *result, int width, bool signedLoad);
     int                 store(uint32_t pc, uint32_t address, uint32_t data, int width);
-    bool                access_csr(uint32_t address, uint32_t data, bool set, bool clr, uint32_t &result);
+    virtual bool        access_csr(uint32_t address, uint32_t data, bool set, bool clr, uint32_t &result);
     void                exception(uint32_t cause, uint32_t pc, uint32_t badaddr = 0);
 
 // MMU
