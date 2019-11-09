@@ -20,6 +20,7 @@ extern "C"
 #include "device_tree.h"
 
 #include "device_uart_lite.h"
+#include "device_uart_8250.h"
 #include "device_spi_lite.h"
 #include "device_timer_r5.h"
 #include "device_timer_owl.h"
@@ -183,6 +184,11 @@ bool device_tree::load(void)
                 {
                     printf("|- Create UART: Addr %08x IRQ %d\n", reg_addr, irq_num);
                     attach_device(new device_uart_lite(reg_addr, irq_ctrl, irq_num, m_console));
+                }
+                else if (!strcmp(compat, "ns8250"))
+                {
+                    printf("|- Create UART: Addr %08x IRQ %d\n", reg_addr, irq_num);
+                    attach_device(new device_uart_8250(reg_addr, irq_ctrl, irq_num, m_console));
                 }
                 else if (!strcmp(compat, "actions,s500-timer"))
                 {
