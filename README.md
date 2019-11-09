@@ -35,7 +35,7 @@ make
 ```
 Usage:
   --elf        | -f FILE       File to load (ELF or BIN)
-  --march      | -m MISA       Machine variant (e.g. RV32IMAC, RV64I, ...)
+  --march      | -m MISA       Machine variant (e.g. RV32IMAC, RV64I, armv6, ...)
   --platform   | -P PLATFORM   Platform to simulate (basic|virt)
   --dtb        | -D FILE       Device tree blob (binary)
   --trace      | -t 1/0        Enable instruction trace
