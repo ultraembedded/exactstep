@@ -36,33 +36,7 @@ device_tree::device_tree(const char *filename, console_io *con_io /*= NULL*/)
 {
     m_fdt      = NULL;
     m_filename = std::string(filename);
-    m_memory   = NULL;
-    m_devices  = NULL;
     m_console  = con_io;
-}
-//-----------------------------------------------------------------
-// create_memory: Create a memory
-//-----------------------------------------------------------------
-bool device_tree::create_memory(uint32_t base, uint32_t size)
-{
-    memory_base *mem = new memory("mem", base, size);
-
-    mem->next = m_memory;
-    m_memory = mem;
-
-    return true;
-}
-//-----------------------------------------------------------------
-// attach_device: Attach a memory device to a particular region
-//-----------------------------------------------------------------
-bool device_tree::attach_device(device *dev)
-{
-    assert(dev->device_next == NULL);
-
-    dev->device_next = m_devices;
-    m_devices = dev;
-
-    return true;
 }
 //-----------------------------------------------------------------
 // open_fdt: Open FDT file (binary)
@@ -111,7 +85,7 @@ bool device_tree::open_fdt(void)
 //-----------------------------------------------------------------
 // load: Process device tree
 //-----------------------------------------------------------------
-bool device_tree::load(void)
+bool device_tree::load(cpu *cpu)
 {
     device *irq_ctrl = NULL;
 
@@ -142,7 +116,7 @@ bool device_tree::load(void)
                     uint32_t reg_size = ntohl(reg[1]);
 
                     printf("|- Attach memory: Addr %08x - %08x\n", reg_addr, reg_addr + reg_size - 1);
-                    create_memory(reg_addr, reg_size);
+                    cpu->create_memory(reg_addr, reg_size);
                 }
                 else if (!strcmp(device_type, "cpu"))
                 {
@@ -172,49 +146,49 @@ bool device_tree::load(void)
                     // TODO: Support multiple controllers
                     irq_ctrl = new device_irq_ctrl(reg_addr, 11);
                     printf("|- Create interrupt controller: Addr %08x\n", reg_addr);
-                    attach_device(irq_ctrl);
+                    cpu->attach_device(irq_ctrl);
                 }
                 else if (!strcmp(compat, "riscv,plic0"))
                 {
-                    irq_ctrl = new device_irq_plic(reg_addr, 0);
+                    irq_ctrl = new device_irq_plic(reg_addr, 11);
                     printf("|- Create interrupt controller: Addr %08x\n", reg_addr);
-                    attach_device(irq_ctrl);
+                    cpu->attach_device(irq_ctrl);
                 }
                 else if (!strcmp(compat, "xlnx,xps-uartlite-1.00.a"))
                 {
                     printf("|- Create UART: Addr %08x IRQ %d\n", reg_addr, irq_num);
-                    attach_device(new device_uart_lite(reg_addr, irq_ctrl, irq_num, m_console));
+                    cpu->attach_device(new device_uart_lite(reg_addr, irq_ctrl, irq_num, m_console));
                 }
                 else if (!strcmp(compat, "ns8250"))
                 {
                     printf("|- Create UART: Addr %08x IRQ %d\n", reg_addr, irq_num);
-                    attach_device(new device_uart_8250(reg_addr, irq_ctrl, irq_num, m_console));
+                    cpu->attach_device(new device_uart_8250(reg_addr, irq_ctrl, irq_num, m_console));
                 }
                 else if (!strcmp(compat, "actions,s500-timer"))
                 {
                     printf("|- Create Timer: Addr %08x IRQ %d\n", reg_addr, irq_num);
-                    attach_device(new device_timer_owl(reg_addr, irq_ctrl, irq_num));
+                    cpu->attach_device(new device_timer_owl(reg_addr, irq_ctrl, irq_num));
                 }
                 else if (!strcmp(compat, "riscv,openr5-timer"))
                 {
                     printf("|- Create Timer: Addr %08x IRQ %d\n", reg_addr, irq_num);
-                    attach_device(new device_timer_r5(reg_addr, irq_ctrl, irq_num));
+                    cpu->attach_device(new device_timer_r5(reg_addr, irq_ctrl, irq_num));
                 }
                 else if (!strcmp(compat, "riscv,clint0"))
                 {
                     // TODO: dual irq numbers...
                     printf("|- Create Timer: Addr %08x IRQ %d\n", reg_addr, irq_num);
-                    attach_device(new device_timer_clint(reg_addr, NULL)); // TODO:
+                    cpu->attach_device(new device_timer_clint(reg_addr, cpu));
                 }
                 else if (!strcmp(compat, "xlnx,xps-spi-2.00.b"))
                 {
                     printf("|- Create SPI: Addr %08x IRQ %d\n", reg_addr, irq_num);
-                    attach_device(new device_spi_lite(reg_addr, irq_ctrl, irq_num));
+                    cpu->attach_device(new device_spi_lite(reg_addr, irq_ctrl, irq_num));
                 }
                 else
                 {
                     printf("|- Create dummy device (%s): Addr %08x - %08x\n", compat, reg_addr, reg_addr + reg_size-1);
-                    attach_device(new device_dummy(reg_addr, reg_size));
+                    cpu->attach_device(new device_dummy(reg_addr, reg_size));
                 }
             }
         }

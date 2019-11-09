@@ -32,29 +32,7 @@ public:
                 return NULL;
 
             device_tree fdt(m_filename.c_str(), m_console);
-            if (fdt.load())
-            {
-                // Attach memories to CPU
-                memory_base *mem_next = NULL;
-                for (memory_base *mem = fdt.get_memory(); mem != NULL; mem = mem_next)
-                {
-                    mem_next  = mem->next;
-                    mem->next = NULL;
-
-                    m_this_cpu->attach_memory(mem);
-                }
-
-                // Attach devices to CPU
-                device *dev_next = NULL;
-                for (device *dev = fdt.get_device(); dev != NULL; dev = dev_next)
-                {
-                    dev_next  = dev->device_next;
-                    dev->device_next = NULL;
-
-                    m_this_cpu->attach_device(dev);
-                }
-            }
-            else
+            if (!fdt.load(m_this_cpu))
                 fprintf(stderr, "ERROR: Failed to open device tree\n");
         }
 

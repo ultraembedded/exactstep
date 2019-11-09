@@ -15,6 +15,9 @@
 #include "device.h"
 #include "console_io.h"
 
+// Forward decl
+class cpu;
+
 //--------------------------------------------------------------------
 // ELF loader
 //--------------------------------------------------------------------
@@ -23,13 +26,7 @@ class device_tree
 public:
     device_tree(const char *filename, console_io *con_io = NULL);
 
-    bool         load(void);
-
-    bool         create_memory(uint32_t base, uint32_t size);
-    memory_base* get_memory(void) { return m_memory; }
-
-    bool         attach_device(device *dev);
-    device     * get_device(void) { return m_devices; }
+    bool         load(cpu *cpu);
 
 protected:
     bool         open_fdt(void);
@@ -38,8 +35,6 @@ protected:
 protected:
     std::string  m_filename;
     uint8_t *    m_fdt;
-    memory_base *m_memory;
-    device      *m_devices;
     console_io  *m_console;
 };
 
