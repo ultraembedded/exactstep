@@ -11,7 +11,7 @@ Unlike QEMU and other CPU emulators which make use of dynamic binary translation
 
 ## Cloning
 ```
-$ git clone https://github.com/ultraembedded/exactstep.git
+git clone https://github.com/ultraembedded/exactstep.git
 ```
 
 ## Building
@@ -21,13 +21,13 @@ This project uses make and ELF + BFD libraries.
 If you are using a Debian based Linux distro (Ubuntu / Linux Mint), you can install the required dependencies using;
 
 ```
-$ sudo apt-get install libelf-dev binutils-dev
+sudo apt-get install libelf-dev binutils-dev
 ```
 
 To build the default command line simulator (CLI);
 ```
-$ cd exactstep
-$ make
+cd exactstep
+make
 ```
 
 ## Usage
@@ -52,7 +52,22 @@ Usage:
 
 The default architecture is a RV32IMAC CPU model. To run a basic ELF;
 ```sh
-$ ./exactstep -f your_elf.elf 
+./exactstep -f your_elf.elf 
+```
+
+## Running RISC-V Compliance Tests
+
+ExactStep passes the RISC-V Compliance Tests for the rv32i, rv32im, rv32imc, rv64i, rv64im categories;
+```
+# Get compliance test suite
+git clone https://github.com/ultraembedded/riscv-compliance.git 
+cd riscv-compliance
+
+# Set path to built exactstep executable
+export TARGET_SIM=/path/to/github/exactstep/exactstep
+
+# Run test suite
+make RISCV_TARGET=exactstep
 ```
 
 ## License
