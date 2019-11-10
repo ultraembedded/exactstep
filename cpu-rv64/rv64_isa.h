@@ -1,3 +1,10 @@
+//-----------------------------------------------------------------
+//                        ExactStep IAISS
+//                             V0.5
+//               github.com/ultraembedded/exactstep
+//                     Copyright 2014-2019
+//                    License: BSD 3-Clause
+//-----------------------------------------------------------------
 #ifndef __RV64_ISA_H__
 #define __RV64_ISA_H__
 
@@ -623,11 +630,15 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 #define SR_MPP_S        (PRIV_SUPER   << SR_MPP_SHIFT)
 #define SR_MPP_M        (PRIV_MACHINE << SR_MPP_SHIFT)
 
+#define SR_UXL          ((uint64_t)2 << 32)
+#define SR_SXL          ((uint64_t)2 << 34)
+#define SR_XLEN64       (SR_UXL | SR_SXL)
+
 #define SR_GET_MPP(val) (((val) >> SR_MPP_SHIFT) & SR_MPP_MASK)
 
 #define SR_SUM          (1 << 18)
 
-#define SR_SMODE_MASK   (SR_UIE | SR_SIE | SR_UPIE | SR_SPIE | SR_SPP | SR_SUM)
+#define SR_SMODE_MASK   (SR_UXL | SR_UIE | SR_SIE | SR_UPIE | SR_SPIE | SR_SPP | SR_SUM)
 
 //--------------------------------------------------------------------
 // IRQ Numbers
@@ -650,6 +661,15 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 #define SR_IP_SSIP      (1 << IRQ_S_SOFT)
 #define SR_IP_STIP      (1 << IRQ_S_TIMER)
 #define SR_IP_SEIP      (1 << IRQ_S_EXT)
+
+//--------------------------------------------------------------------
+// SATP CSR bits
+//--------------------------------------------------------------------
+#define SATP_PPN_SHIFT    0
+#define SATP_PPN_MASK     0x00000FFFFFFFFFFF
+#define SATP_ASID_SHIFT   44
+#define SATP_ASID_MASK    0xFFFF
+#define SATP_MODE         0xF000000000000000
 
 //--------------------------------------------------------------------
 // CSR Registers - Simulation control
@@ -781,5 +801,35 @@ enum eRegisters
 #define MCAUSE_PAGE_FAULT_LOAD          ((0 << MCAUSE_INT) | 13)
 #define MCAUSE_PAGE_FAULT_STORE         ((0 << MCAUSE_INT) | 15)
 #define MCAUSE_INTERRUPT                (1 << MCAUSE_INT)
+
+//--------------------------------------------------------------------
+// MMU Defs
+//--------------------------------------------------------------------
+#define MMU_LEVELS          3
+#define MMU_PTIDXBITS       9
+#define MMU_PTESIZE         8
+#define MMU_PGSHIFT         12
+#define MMU_PGSIZE          (1 << MMU_PGSHIFT)
+#define MMU_VPN_BITS        (MMU_PTIDXBITS * MMU_LEVELS)
+#define MMU_PPN_BITS        (32 - MMU_PGSHIFT)
+#define MMU_VA_BITS         (MMU_VPN_BITS + MMU_PGSHIFT)
+
+#define PAGE_PRESENT   (1 << 0)
+#define PAGE_READ      (1 << 1)    // Readable
+#define PAGE_WRITE     (1 << 2)    // Writable
+#define PAGE_EXEC      (1 << 3)    // Executable
+#define PAGE_USER      (1 << 4)    // User
+#define PAGE_GLOBAL    (1 << 5)    // Global
+#define PAGE_ACCESSED  (1 << 6)    // Set by hardware on any access
+#define PAGE_DIRTY     (1 << 7)    // Set by hardware on any write
+#define PAGE_SOFT      (3 << 8)    // Reserved for software
+
+#define PAGE_FLAGS     (0x3FF)
+
+#define PAGE_SPECIAL   _PAGE_SOFT
+#define PAGE_TABLE(pte)     (((pte) & (PAGE_PRESENT | PAGE_READ | PAGE_WRITE | PAGE_EXEC)) == PAGE_PRESENT)
+
+#define PAGE_PFN_SHIFT 10
+#define PAGE_SIZE      4096
 
 #endif

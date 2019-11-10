@@ -1,3 +1,10 @@
+//-----------------------------------------------------------------
+//                        ExactStep IAISS
+//                             V0.5
+//               github.com/ultraembedded/exactstep
+//                     Copyright 2014-2019
+//                    License: BSD 3-Clause
+//-----------------------------------------------------------------
 #ifndef __RV64_H__
 #define __RV64_H__
 
@@ -68,6 +75,13 @@ protected:
     int                 store(uint64_t pc, uint64_t address, uint64_t data, int width);
     virtual bool        access_csr(uint64_t address, uint64_t data, bool set, bool clr, uint64_t &result);
     void                exception(uint64_t cause, uint64_t pc, uint64_t badaddr = 0);
+
+// MMU
+private:
+    int                 mmu_read_word(uint64_t address, uint64_t *val);
+    uint64_t            mmu_walk(uint64_t addr);
+    int                 mmu_i_translate(uint64_t addr, uint64_t *physical);
+    int                 mmu_d_translate(uint64_t pc, uint64_t addr, uint64_t *physical, int writeNotRead);
 
 private:
 
