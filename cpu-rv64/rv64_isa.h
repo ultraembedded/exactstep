@@ -143,7 +143,7 @@ enum eInstructions
     ENUM_INST_REMU,
     ENUM_INST_FENCE,
     ENUM_INST_WFI,
-	// 64-bit
+    // 64-bit
     ENUM_INST_SD,
     ENUM_INST_LD,
     ENUM_INST_ADDIW,
@@ -636,7 +636,9 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 
 #define SR_GET_MPP(val) (((val) >> SR_MPP_SHIFT) & SR_MPP_MASK)
 
+#define SR_MXR          (1 << 19)
 #define SR_SUM          (1 << 18)
+#define SR_MPRV         (1 << 17)
 
 #define SR_SMODE_MASK   (SR_UXL | SR_UIE | SR_SIE | SR_UPIE | SR_SPIE | SR_SPP | SR_SUM)
 
@@ -702,7 +704,7 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 #define CSR_MEPC          0x341
 #define CSR_MEPC_MASK     0xFFFFFFFFFFFFFFFFULL
 #define CSR_MCAUSE        0x342
-#define CSR_MCAUSE_MASK   0x8000000F
+#define CSR_MCAUSE_MASK   0xFFFFFFFF8000000FULL
 #define CSR_MTVAL         0x343
 #define CSR_MTVAL_MASK    0xFFFFFFFFFFFFFFFFULL
 #define CSR_MIP           0x344
@@ -732,7 +734,7 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 #define CSR_SEPC          0x141
 #define CSR_SEPC_MASK     0xFFFFFFFFFFFFFFFFULL
 #define CSR_SCAUSE        0x142
-#define CSR_SCAUSE_MASK   0x8000000F
+#define CSR_SCAUSE_MASK   0xFFFFFFFF8000000FULL
 #define CSR_STVAL         0x143
 #define CSR_STVAL_MASK    0xFFFFFFFFFFFFFFFFULL
 #define CSR_SIP           0x144
@@ -785,22 +787,22 @@ enum eRegisters
 //--------------------------------------------------------------------
 // Exception Causes
 //--------------------------------------------------------------------
-#define MCAUSE_INT                      31
-#define MCAUSE_MISALIGNED_FETCH         ((0 << MCAUSE_INT) | 0)
-#define MCAUSE_FAULT_FETCH              ((0 << MCAUSE_INT) | 1)
-#define MCAUSE_ILLEGAL_INSTRUCTION      ((0 << MCAUSE_INT) | 2)
-#define MCAUSE_BREAKPOINT               ((0 << MCAUSE_INT) | 3)
-#define MCAUSE_MISALIGNED_LOAD          ((0 << MCAUSE_INT) | 4)
-#define MCAUSE_FAULT_LOAD               ((0 << MCAUSE_INT) | 5)
-#define MCAUSE_MISALIGNED_STORE         ((0 << MCAUSE_INT) | 6)
-#define MCAUSE_FAULT_STORE              ((0 << MCAUSE_INT) | 7)
-#define MCAUSE_ECALL_U                  ((0 << MCAUSE_INT) | 8)
-#define MCAUSE_ECALL_S                  ((0 << MCAUSE_INT) | 9)
-#define MCAUSE_ECALL_M                  ((0 << MCAUSE_INT) | 11)
-#define MCAUSE_PAGE_FAULT_INST          ((0 << MCAUSE_INT) | 12)
-#define MCAUSE_PAGE_FAULT_LOAD          ((0 << MCAUSE_INT) | 13)
-#define MCAUSE_PAGE_FAULT_STORE         ((0 << MCAUSE_INT) | 15)
-#define MCAUSE_INTERRUPT                (1 << MCAUSE_INT)
+#define MCAUSE_INT                      63
+#define MCAUSE_MISALIGNED_FETCH         (((uint64_t)0 << MCAUSE_INT) | 0)
+#define MCAUSE_FAULT_FETCH              (((uint64_t)0 << MCAUSE_INT) | 1)
+#define MCAUSE_ILLEGAL_INSTRUCTION      (((uint64_t)0 << MCAUSE_INT) | 2)
+#define MCAUSE_BREAKPOINT               (((uint64_t)0 << MCAUSE_INT) | 3)
+#define MCAUSE_MISALIGNED_LOAD          (((uint64_t)0 << MCAUSE_INT) | 4)
+#define MCAUSE_FAULT_LOAD               (((uint64_t)0 << MCAUSE_INT) | 5)
+#define MCAUSE_MISALIGNED_STORE         (((uint64_t)0 << MCAUSE_INT) | 6)
+#define MCAUSE_FAULT_STORE              (((uint64_t)0 << MCAUSE_INT) | 7)
+#define MCAUSE_ECALL_U                  (((uint64_t)0 << MCAUSE_INT) | 8)
+#define MCAUSE_ECALL_S                  (((uint64_t)0 << MCAUSE_INT) | 9)
+#define MCAUSE_ECALL_M                  (((uint64_t)0 << MCAUSE_INT) | 11)
+#define MCAUSE_PAGE_FAULT_INST          (((uint64_t)0 << MCAUSE_INT) | 12)
+#define MCAUSE_PAGE_FAULT_LOAD          (((uint64_t)0 << MCAUSE_INT) | 13)
+#define MCAUSE_PAGE_FAULT_STORE         (((uint64_t)0 << MCAUSE_INT) | 15)
+#define MCAUSE_INTERRUPT                (((uint64_t)1 << MCAUSE_INT))
 
 //--------------------------------------------------------------------
 // MMU Defs

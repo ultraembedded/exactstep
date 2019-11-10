@@ -26,7 +26,7 @@ public:
     void                step(void);
 
     void                set_interrupt(int irq);
-    void                clr_interrupt(int irq) { }
+    void                clr_interrupt(int irq);
 
     uint32_t            get_register(int r);
     uint64_t            get_register64(int r);

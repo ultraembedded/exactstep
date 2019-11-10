@@ -63,6 +63,7 @@ void rv64::set_register(int r, uint64_t val)
     else if (r == (RISCV_REGNO_CSR0 + CSR_MCAUSE)) m_csr_mcause = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MSTATUS)) m_csr_msr = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MTVEC)) m_csr_mevec = val;
+    else if (r == (RISCV_REGNO_CSR0 + CSR_MTVAL)) m_csr_mtval = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIE)) m_csr_mie = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIP)) m_csr_mip = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MTIME)) m_csr_mtime = val;
@@ -90,6 +91,7 @@ uint32_t rv64::get_register(int r)
     else if (r == (RISCV_REGNO_CSR0 + CSR_MCAUSE)) return m_csr_mcause;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MSTATUS)) return m_csr_msr;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MTVEC)) return m_csr_mevec;
+    else if (r == (RISCV_REGNO_CSR0 + CSR_MTVAL)) return m_csr_mtval;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIE)) return m_csr_mie;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIP)) return m_csr_mip;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MCYCLE)) return m_csr_mtime;
@@ -119,6 +121,7 @@ uint64_t rv64::get_register64(int r)
     else if (r == (RISCV_REGNO_CSR0 + CSR_MCAUSE)) return m_csr_mcause;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MSTATUS)) return m_csr_msr;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MTVEC)) return m_csr_mevec;
+    else if (r == (RISCV_REGNO_CSR0 + CSR_MTVAL)) return m_csr_mtval;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIE)) return m_csr_mie;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIP)) return m_csr_mip;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MCYCLE)) return m_csr_mtime;
@@ -375,15 +378,24 @@ int rv64::mmu_i_translate(uint64_t addr, uint64_t *physical)
 int rv64::mmu_d_translate(uint64_t pc, uint64_t addr, uint64_t *physical, int writeNotRead)
 {
     bool page_fault = false;
+    uint32_t priv = m_csr_mpriv;
+
+    // Modify data access privilege level (allows machine mode to use MMU)
+    if (m_csr_msr & SR_MPRV)
+        priv = SR_GET_MPP(m_csr_msr);
 
     // Machine - no MMU
-    if (m_csr_mpriv > PRIV_SUPER)
+    if (priv > PRIV_SUPER)
     {
         *physical = addr;
         return 1; 
     }
 
     uint64_t pte = mmu_walk(addr);
+
+    // MXR: Loads from pages marked either readable or executable (R=1 or X=1) will succeed.
+    if ((m_csr_msr & SR_MXR) && (pte & PAGE_EXEC))
+        pte |= PAGE_READ;
 
     // Reserved configurations
     if (((pte & (PAGE_EXEC | PAGE_READ | PAGE_WRITE)) == PAGE_WRITE) ||
@@ -392,7 +404,7 @@ int rv64::mmu_d_translate(uint64_t pc, uint64_t addr, uint64_t *physical, int wr
         page_fault = true;
     }
     // Supervisor mode
-    else if (m_csr_mpriv == PRIV_SUPER)
+    else if (priv == PRIV_SUPER)
     {
         // User page access - super mode access not enabled
         if ((pte & PAGE_USER) && !(m_csr_msr & SR_SUM))
@@ -2611,8 +2623,21 @@ void rv64::step(void)
 //-----------------------------------------------------------------
 void rv64::set_interrupt(int irq)
 {
-    assert(irq == 0);
-    m_csr_mip |= (SR_IP_MEIP | SR_IP_SEIP);
+    assert(irq == IRQ_M_EXT || irq == IRQ_M_TIMER);
+    if (irq == IRQ_M_EXT)
+        m_csr_mip |= (SR_IP_MEIP | SR_IP_SEIP);
+    else
+        m_csr_mip |= SR_IP_MTIP;
+
+}
+//-----------------------------------------------------------------
+// clr_interrupt: Clear interrupt pending
+//-----------------------------------------------------------------
+void rv64::clr_interrupt(int irq)
+{
+    assert(irq == IRQ_M_TIMER);
+    if (irq == IRQ_M_TIMER)
+        m_csr_mip &= ~SR_IP_MTIP;
 }
 //-----------------------------------------------------------------
 // stats_reset: Reset runtime stats
