@@ -55,6 +55,16 @@ The default architecture is a RV32IMAC CPU model. To run a basic ELF;
 ./exactstep -f your_elf.elf 
 ```
 
+## Running RISC-V Linux
+```
+# Get prebuilt bootloader + kernel + rootfs images
+git clone https://github.com/ultraembedded/riscv-linux-prebuilt.git
+cd riscv-linux-prebuilt
+
+# Boot Linux (with Busybox userspace)
+exactstep --march RV64IMAC --elf opensbi-kernel-busybox/qemu-virt-rv64-5.4-rc7-busybox-1.32.0.elf --dtb opensbi-kernel-busybox/qemu-virt-rv64-config.dtb
+```
+
 ## Running RISC-V Compliance Tests
 
 ExactStep passes the RISC-V Compliance Tests for the rv32i, rv32im, rv32imc, rv64i, rv64im categories;
