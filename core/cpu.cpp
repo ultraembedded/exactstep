@@ -47,6 +47,11 @@ bool cpu::error(bool is_fatal, const char *fmt, ...)
 //-----------------------------------------------------------------
 bool cpu::create_memory(uint32_t baseAddr, uint32_t len, uint8_t *buf /*=NULL*/)
 {
+    // Avoid adding duplicate memories
+    for (memory_base *mem = m_memories; mem != NULL; mem = mem->next)
+        if (mem->valid_addr(baseAddr) && mem->valid_addr(baseAddr + len -1))
+            return true;
+
     return attach_memory(new memory("mem", baseAddr, len, buf));
 }
 //-----------------------------------------------------------------
