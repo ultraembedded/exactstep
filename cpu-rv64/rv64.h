@@ -114,6 +114,11 @@ private:
     uint64_t            m_csr_satp;
     uint64_t            m_csr_sscratch;
 
+    // TLB cache
+    static const int MMU_TLB_ENTRIES = 64;
+    uint64_t            m_mmu_addr[MMU_TLB_ENTRIES];
+    uint64_t            m_mmu_pte[MMU_TLB_ENTRIES];
+
     // Settings
     bool                m_enable_mem_errors;
     bool                m_compliant_csr;

@@ -174,9 +174,15 @@ void rv64::reset(uint32_t start_addr)
     m_csr_satp     = 0;
     m_csr_sscratch = 0;
 
-    m_fault       = false;
-    m_break       = false;
-    m_trace       = 0;
+    m_fault         = false;
+    m_break         = false;
+    m_trace         = 0;
+
+    for (int i=0;i<MMU_TLB_ENTRIES;i++)
+    {
+        m_mmu_addr[i] = 0;
+        m_mmu_pte[i]  = 0;
+    }
 
     stats_reset();
 }
@@ -232,6 +238,12 @@ uint64_t rv64::mmu_walk(uint64_t addr)
     }
     else
     {
+        // Fast path lookup in TLBs
+        uint32_t tlb_entry = (addr >> MMU_PGSHIFT) & (MMU_TLB_ENTRIES-1);
+        uint64_t tlb_match = (addr >> MMU_PGSHIFT);
+        if (m_mmu_addr[tlb_entry] == tlb_match && m_mmu_pte[tlb_entry] != 0)
+            return m_mmu_pte[tlb_entry];
+
         uint64_t base = ((m_csr_satp >> SATP_PPN_SHIFT) & SATP_PPN_MASK) * PAGE_SIZE;
         uint64_t asid = ((m_csr_satp >> SATP_ASID_SHIFT) & SATP_ASID_MASK);
 
@@ -302,6 +314,8 @@ uint64_t rv64::mmu_walk(uint64_t addr)
                     error(false, "%08x: PTE access out of range %x\n", m_pc, addr);
                 }
 
+                m_mmu_addr[tlb_entry] = tlb_match;
+                m_mmu_pte[tlb_entry]  = pte;
                 break;
             }
         }
@@ -907,7 +921,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_ANDI_MASK) == INST_ANDI)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: andi r%d, r%d, %d\n", pc, rd, rs1, imm12));
         INST_STAT(ENUM_INST_ANDI);
         reg_rd = reg_rs1 & imm12;
@@ -915,7 +928,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_ORI_MASK) == INST_ORI)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: ori r%d, r%d, %d\n", pc, rd, rs1, imm12));
         INST_STAT(ENUM_INST_ORI);
         reg_rd = reg_rs1 | imm12;
@@ -923,7 +935,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_XORI_MASK) == INST_XORI)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: xori r%d, r%d, %d\n", pc, rd, rs1, imm12));
         INST_STAT(ENUM_INST_XORI);
         reg_rd = reg_rs1 ^ imm12;
@@ -931,7 +942,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_ADDI_MASK) == INST_ADDI)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: addi r%d, r%d, %d\n", pc, rd, rs1, imm12));
         INST_STAT(ENUM_INST_ADDI);
         reg_rd = reg_rs1 + imm12;
@@ -939,7 +949,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SLTI_MASK) == INST_SLTI)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: slti r%d, r%d, %d\n", pc, rd, rs1, imm12));
         INST_STAT(ENUM_INST_SLTI);
         reg_rd = (int64_t)reg_rs1 < (int64_t)imm12;
@@ -947,7 +956,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SLTIU_MASK) == INST_SLTIU)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: sltiu r%d, r%d, %d\n", pc, rd, rs1, (uint64_t)imm12));
         INST_STAT(ENUM_INST_SLTIU);
         reg_rd = (uint64_t)reg_rs1 < (uint64_t)imm12;
@@ -955,7 +963,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SLLI_MASK) == INST_SLLI)
     {
-        // ['rd', 'rs1']
         DPRINTF(LOG_INST,("%016llx: slli r%d, r%d, %d\n", pc, rd, rs1, shamt));
         INST_STAT(ENUM_INST_SLLI);
         reg_rd = reg_rs1 << shamt;
@@ -963,7 +970,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SRLI_MASK) == INST_SRLI)
     {
-        // ['rd', 'rs1', 'shamt']
         DPRINTF(LOG_INST,("%016llx: srli r%d, r%d, %d\n", pc, rd, rs1, shamt));
         INST_STAT(ENUM_INST_SRLI);
         reg_rd = (uint64_t)reg_rs1 >> shamt;
@@ -971,7 +977,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SRAI_MASK) == INST_SRAI)
     {
-        // ['rd', 'rs1', 'shamt']
         DPRINTF(LOG_INST,("%016llx: srai r%d, r%d, %d\n", pc, rd, rs1, shamt));
         INST_STAT(ENUM_INST_SRAI);
         reg_rd = (int64_t)reg_rs1 >> shamt;
@@ -979,7 +984,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_LUI_MASK) == INST_LUI)
     {
-        // ['rd', 'imm20']
         DPRINTF(LOG_INST,("%016llx: lui r%d, 0x%x\n", pc, rd, imm20));
         INST_STAT(ENUM_INST_LUI);
         reg_rd = imm20;
@@ -987,7 +991,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_AUIPC_MASK) == INST_AUIPC)
     {
-        // ['rd', 'imm20']
         DPRINTF(LOG_INST,("%016llx: auipc r%d, 0x%x\n", pc, rd, imm20));
         INST_STAT(ENUM_INST_AUIPC);
         reg_rd = imm20 + pc;
@@ -995,7 +998,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_ADD_MASK) == INST_ADD)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: add r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_ADD);
         reg_rd = reg_rs1 + reg_rs2;
@@ -1003,7 +1005,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SUB_MASK) == INST_SUB)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: sub r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_SUB);
         reg_rd = reg_rs1 - reg_rs2;
@@ -1011,7 +1012,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SLT_MASK) == INST_SLT)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: slt r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_SLT);
         reg_rd = (int64_t)reg_rs1 < (int64_t)reg_rs2;
@@ -1019,7 +1019,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SLTU_MASK) == INST_SLTU)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: sltu r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_SLTU);
         reg_rd = (uint64_t)reg_rs1 < (uint64_t)reg_rs2;
@@ -1027,7 +1026,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_XOR_MASK) == INST_XOR)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: xor r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_XOR);
         reg_rd = reg_rs1 ^ reg_rs2;
@@ -1035,7 +1033,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_OR_MASK) == INST_OR)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: or r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_OR);
         reg_rd = reg_rs1 | reg_rs2;
@@ -1043,7 +1040,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_AND_MASK) == INST_AND)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: and r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_AND);
         reg_rd = reg_rs1 & reg_rs2;
@@ -1051,7 +1047,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SLL_MASK) == INST_SLL)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: sll r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_SLL);
         reg_rd = reg_rs1 << reg_rs2;
@@ -1059,7 +1054,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SRL_MASK) == INST_SRL)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: srl r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_SRL);
         reg_rd = (uint64_t)reg_rs1 >> reg_rs2;
@@ -1067,7 +1061,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SRA_MASK) == INST_SRA)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: sra r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_SRA);
         reg_rd = (int64_t)reg_rs1 >> reg_rs2;
@@ -1075,7 +1068,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_JAL_MASK) == INST_JAL)
     {
-        // ['rd', 'jimm20']
         DPRINTF(LOG_INST,("%016llx: jal r%d, %d\n", pc, rd, jimm20));
         INST_STAT(ENUM_INST_JAL);
         reg_rd = pc + 4;
@@ -1085,7 +1077,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_JALR_MASK) == INST_JALR)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: jalr r%d, r%d\n", pc, rs1, imm12));
         INST_STAT(ENUM_INST_JALR);
         reg_rd = pc + 4;
@@ -1095,7 +1086,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_BEQ_MASK) == INST_BEQ)
     {
-        // ['bimm12hi', 'rs1', 'rs2', 'bimm12lo']
         DPRINTF(LOG_INST,("%016llx: beq r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BEQ);
         if (reg_rs1 == reg_rs2)
@@ -1110,7 +1100,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_BNE_MASK) == INST_BNE)
     {
-        // ['bimm12hi', 'rs1', 'rs2', 'bimm12lo']
         DPRINTF(LOG_INST,("%016llx: bne r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BNE);
         if (reg_rs1 != reg_rs2)
@@ -1125,7 +1114,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_BLT_MASK) == INST_BLT)
     {
-        // ['bimm12hi', 'rs1', 'rs2', 'bimm12lo']
         DPRINTF(LOG_INST,("%016llx: blt r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BLT);
         if ((int64_t)reg_rs1 < (int64_t)reg_rs2)
@@ -1140,7 +1128,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_BGE_MASK) == INST_BGE)
     {
-        // ['bimm12hi', 'rs1', 'rs2', 'bimm12lo']
         DPRINTF(LOG_INST,("%016llx: bge r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BGE);
         if ((int64_t)reg_rs1 >= (int64_t)reg_rs2)
@@ -1155,7 +1142,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_BLTU_MASK) == INST_BLTU)
     {
-        // ['bimm12hi', 'rs1', 'rs2', 'bimm12lo']
         DPRINTF(LOG_INST,("%016llx: bltu r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BLTU);
         if ((uint64_t)reg_rs1 < (uint64_t)reg_rs2)
@@ -1170,7 +1156,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_BGEU_MASK) == INST_BGEU)
     {
-        // ['bimm12hi', 'rs1', 'rs2', 'bimm12lo']
         DPRINTF(LOG_INST,("%016llx: bgeu r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BGEU);
         if ((uint64_t)reg_rs1 >= (uint64_t)reg_rs2)
@@ -1185,7 +1170,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_LB_MASK) == INST_LB)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: lb r%d, %d(r%d)\n", pc, rd, imm12, rs1));
         INST_STAT(ENUM_INST_LB);
         if (load(pc, reg_rs1 + imm12, &reg_rd, 1, true))
@@ -1195,7 +1179,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_LH_MASK) == INST_LH)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: lh r%d, %d(r%d)\n", pc, rd, imm12, rs1));
         INST_STAT(ENUM_INST_LH);
         if (load(pc, reg_rs1 + imm12, &reg_rd, 2, true))
@@ -1205,7 +1188,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_LW_MASK) == INST_LW)
     {
-        // ['rd', 'rs1', 'imm12']        
         INST_STAT(ENUM_INST_LW);
         DPRINTF(LOG_INST,("%016llx: lw r%d, %d(r%d)\n", pc, rd, imm12, rs1));
         if (load(pc, reg_rs1 + imm12, &reg_rd, 4, true))
@@ -1215,7 +1197,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_LBU_MASK) == INST_LBU)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: lbu r%d, %d(r%d)\n", pc, rd, imm12, rs1));
         INST_STAT(ENUM_INST_LBU);
         if (load(pc, reg_rs1 + imm12, &reg_rd, 1, false))
@@ -1225,7 +1206,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_LHU_MASK) == INST_LHU)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: lhu r%d, %d(r%d)\n", pc, rd, imm12, rs1));
         INST_STAT(ENUM_INST_LHU);
         if (load(pc, reg_rs1 + imm12, &reg_rd, 2, false))
@@ -1235,7 +1215,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_LWU_MASK) == INST_LWU)
     {
-        // ['rd', 'rs1', 'imm12']
         DPRINTF(LOG_INST,("%016llx: lwu r%d, %d(r%d)\n", pc, rd, imm12, rs1));
         INST_STAT(ENUM_INST_LWU);
         if (load(pc, reg_rs1 + imm12, &reg_rd, 4, false))
@@ -1245,7 +1224,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SB_MASK) == INST_SB)
     {
-        // ['imm12hi', 'rs1', 'rs2', 'imm12lo']
         DPRINTF(LOG_INST,("%016llx: sb %d(r%d), r%d\n", pc, storeimm, rs1, rs2));
         INST_STAT(ENUM_INST_SB);
         if (store(pc, reg_rs1 + storeimm, reg_rs2, 1))
@@ -1258,7 +1236,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SH_MASK) == INST_SH)
     {
-        // ['imm12hi', 'rs1', 'rs2', 'imm12lo']
         DPRINTF(LOG_INST,("%016llx: sh %d(r%d), r%d\n", pc, storeimm, rs1, rs2));
         INST_STAT(ENUM_INST_SH);
         if (store(pc, reg_rs1 + storeimm, reg_rs2, 2))
@@ -1271,7 +1248,6 @@ void rv64::execute(void)
     }
     else if ((opcode & INST_SW_MASK) == INST_SW)
     {
-        // ['imm12hi', 'rs1', 'rs2', 'imm12lo']
         DPRINTF(LOG_INST,("%016llx: sw %d(r%d), r%d\n", pc, storeimm, rs1, rs2));
         INST_STAT(ENUM_INST_SW);
         if (store(pc, reg_rs1 + storeimm, reg_rs2, 4))
@@ -1284,7 +1260,6 @@ void rv64::execute(void)
     }
     else if (m_enable_rvm && (opcode & INST_MUL_MASK) == INST_MUL)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: mul r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_MUL);
         reg_rd = (int64_t)reg_rs1 * (int64_t)reg_rs2;
@@ -1292,7 +1267,6 @@ void rv64::execute(void)
     }
     else if (m_enable_rvm && (opcode & INST_MULH_MASK) == INST_MULH)
     {
-        // ['rd', 'rs1', 'rs2']
         long long res = ((long long) (int64_t)reg_rs1) * ((long long)(int64_t)reg_rs2);
         INST_STAT(ENUM_INST_MULH);
         DPRINTF(LOG_INST,("%016llx: mulh r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1301,7 +1275,6 @@ void rv64::execute(void)
     }
     else if (m_enable_rvm && (opcode & INST_MULHSU_MASK) == INST_MULHSU)
     {
-        // ['rd', 'rs1', 'rs2']
         long long res = ((long long) (int)reg_rs1) * ((unsigned long long)(unsigned)reg_rs2);
         INST_STAT(ENUM_INST_MULHSU);
         DPRINTF(LOG_INST,("%016llx: mulhsu r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1310,7 +1283,6 @@ void rv64::execute(void)
     }
     else if (m_enable_rvm && (opcode & INST_MULHU_MASK) == INST_MULHU)
     {
-        // ['rd', 'rs1', 'rs2']
         unsigned long long res = ((unsigned long long) (unsigned)reg_rs1) * ((unsigned long long)(unsigned)reg_rs2);
         INST_STAT(ENUM_INST_MULHU);
         DPRINTF(LOG_INST,("%016llx: mulhu r%d, r%d, r%d\n", pc, rd, rs1, rs2));
@@ -1319,7 +1291,6 @@ void rv64::execute(void)
     }
     else if (m_enable_rvm && (opcode & INST_DIV_MASK) == INST_DIV)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: div r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_DIV);
         if ((int64_t)reg_rs1 == INT64_MIN && (int64_t)reg_rs2 == -1)
@@ -1332,7 +1303,6 @@ void rv64::execute(void)
     }
     else if (m_enable_rvm && (opcode & INST_DIVU_MASK) == INST_DIVU)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: divu r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_DIVU);
         if (reg_rs2 != 0)
@@ -1343,7 +1313,6 @@ void rv64::execute(void)
     }
     else if (m_enable_rvm && (opcode & INST_REM_MASK) == INST_REM)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: rem r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_REM);
 
@@ -1357,7 +1326,6 @@ void rv64::execute(void)
     }
     else if (m_enable_rvm && (opcode & INST_REMU_MASK) == INST_REMU)
     {
-        // ['rd', 'rs1', 'rs2']
         DPRINTF(LOG_INST,("%016llx: remu r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         INST_STAT(ENUM_INST_REMU);
         if (reg_rs2 != 0)
@@ -1440,6 +1408,15 @@ void rv64::execute(void)
     {
         DPRINTF(LOG_INST,("%016llx: fence\n", pc));
         INST_STAT(ENUM_INST_FENCE);
+
+        // SFENCE.VMA
+        if ((opcode & INST_SFENCE_MASK) == INST_SFENCE)
+            for (int i=0;i<MMU_TLB_ENTRIES;i++)
+            {
+                m_mmu_addr[i]      = 0;
+                m_mmu_pte[i]       = 0;
+            }
+
         pc += 4;
     }
     else if ((opcode & INST_CSRRW_MASK) == INST_CSRRW)
