@@ -86,6 +86,9 @@ public:
     // Instruction trace
     virtual void      enable_trace(uint32_t mask) { m_trace = mask; }
 
+    // Monitor executed instructions
+    virtual void      commit_pc(uint64_t pc) { }
+
     // Stats
     virtual void      stats_reset(void) = 0;
     virtual void      stats_dump(void) = 0;

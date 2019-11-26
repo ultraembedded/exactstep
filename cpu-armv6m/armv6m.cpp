@@ -183,8 +183,13 @@ void armv6m::step(void)
     if (TRACE_ENABLED(LOG_INST))
         armv6m_dump_inst(inst);
 
+    uint32_t pc_x = m_regfile[REG_PC];
+
     // Execute
     armv6m_execute(inst, inst2);
+
+    // Monitor executed instructions
+    commit_pc(pc_x);
 
     if (TRACE_ENABLED(LOG_REGISTERS))
     {

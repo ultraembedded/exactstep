@@ -2076,6 +2076,9 @@ void rv32::execute(void)
     if (rd != 0 && !take_exception)
         m_gpr[rd] = reg_rd;
 
+    // Monitor executed instructions
+    commit_pc(m_pc_x);
+
     // Pending interrupt
     if (!take_exception && (m_csr_mip & m_csr_mie))
     {
