@@ -189,7 +189,7 @@ void armv6m::step(void)
     armv6m_execute(inst, inst2);
 
     // Monitor executed instructions
-    commit_pc(pc_x);
+    log_commit_pc(pc_x);
 
     if (TRACE_ENABLED(LOG_REGISTERS))
     {

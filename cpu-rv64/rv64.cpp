@@ -833,6 +833,8 @@ void rv64::exception(uint64_t cause, uint64_t pc, uint64_t badaddr /*= 0*/)
         m_csr_scause = cause;
         m_csr_stval  = badaddr;
 
+        log_exception(pc, m_csr_sevec, cause);
+
         // Set new PC
         m_pc         = m_csr_sevec;
     }
@@ -858,8 +860,10 @@ void rv64::exception(uint64_t cause, uint64_t pc, uint64_t badaddr /*= 0*/)
         m_csr_mcause = cause;
         m_csr_mtval  = badaddr;
 
+        log_exception(pc, m_csr_mevec, cause);
+
         // Set new PC
-        m_pc         = m_csr_mevec; // TODO: This should be a product of the except num
+        m_pc         = m_csr_mevec;
     }
 }
 //-----------------------------------------------------------------
@@ -1073,7 +1077,12 @@ void rv64::execute(void)
         reg_rd = pc + 4;
         pc+= jimm20;
 
-        m_stats[STATS_BRANCHES]++;        
+        if (rd == RISCV_REG_RA)
+            log_branch_call(m_pc, pc);
+        else
+            log_branch(m_pc, pc, true);
+
+        m_stats[STATS_BRANCHES]++;
     }
     else if ((opcode & INST_JALR_MASK) == INST_JALR)
     {
@@ -1082,16 +1091,27 @@ void rv64::execute(void)
         reg_rd = pc + 4;
         pc = (reg_rs1 + imm12) & ~1;
 
+        if (rs1 == RISCV_REG_RA && imm12 == 0)
+            log_branch_ret(m_pc, pc);
+        else if (rd == RISCV_REG_RA)
+            log_branch_call(m_pc, pc);
+        else
+            log_branch(m_pc, pc, true);
+
         m_stats[STATS_BRANCHES]++;        
     }
     else if ((opcode & INST_BEQ_MASK) == INST_BEQ)
     {
         DPRINTF(LOG_INST,("%016llx: beq r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BEQ);
-        if (reg_rs1 == reg_rs2)
+
+        bool take_branch = (reg_rs1 == reg_rs2);
+        if (take_branch)
             pc += bimm;
         else
             pc += 4;
+
+        log_branch(m_pc, pc, take_branch);
 
         // No writeback
         rd = 0;
@@ -1102,10 +1122,14 @@ void rv64::execute(void)
     {
         DPRINTF(LOG_INST,("%016llx: bne r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BNE);
-        if (reg_rs1 != reg_rs2)
+
+        bool take_branch = (reg_rs1 != reg_rs2);
+        if (take_branch)
             pc += bimm;
         else
             pc += 4;
+
+        log_branch(m_pc, pc, take_branch);
 
         // No writeback
         rd = 0;
@@ -1116,10 +1140,14 @@ void rv64::execute(void)
     {
         DPRINTF(LOG_INST,("%016llx: blt r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BLT);
-        if ((int64_t)reg_rs1 < (int64_t)reg_rs2)
+
+        bool take_branch = ((int64_t)reg_rs1 < (int64_t)reg_rs2);
+        if (take_branch)
             pc += bimm;
         else
             pc += 4;
+
+        log_branch(m_pc, pc, take_branch);
 
         // No writeback
         rd = 0;
@@ -1130,10 +1158,14 @@ void rv64::execute(void)
     {
         DPRINTF(LOG_INST,("%016llx: bge r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BGE);
-        if ((int64_t)reg_rs1 >= (int64_t)reg_rs2)
+
+        bool take_branch = ((int64_t)reg_rs1 >= (int64_t)reg_rs2);
+        if (take_branch)
             pc += bimm;
         else
             pc += 4;
+
+        log_branch(m_pc, pc, take_branch);
 
         // No writeback
         rd = 0;
@@ -1144,10 +1176,14 @@ void rv64::execute(void)
     {
         DPRINTF(LOG_INST,("%016llx: bltu r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BLTU);
-        if ((uint64_t)reg_rs1 < (uint64_t)reg_rs2)
+
+        bool take_branch = ((uint64_t)reg_rs1 < (uint64_t)reg_rs2);
+        if (take_branch)
             pc += bimm;
         else
             pc += 4;
+
+        log_branch(m_pc, pc, take_branch);
 
         // No writeback
         rd = 0;
@@ -1158,10 +1194,14 @@ void rv64::execute(void)
     {
         DPRINTF(LOG_INST,("%016llx: bgeu r%d, r%d, %d\n", pc, rs1, rs2, bimm));
         INST_STAT(ENUM_INST_BGEU);
-        if ((uint64_t)reg_rs1 >= (uint64_t)reg_rs2)
+
+        bool take_branch = ((uint64_t)reg_rs1 >= (uint64_t)reg_rs2);
+        if (take_branch)
             pc += bimm;
         else
             pc += 4;
+
+        log_branch(m_pc, pc, take_branch);
 
         // No writeback
         rd = 0;
@@ -2329,6 +2369,7 @@ void rv64::execute(void)
             DPRINTF(LOG_INST,("%016llx: c.j 0x%08x\n", pc, pc + imm));
             INST_STAT(ENUM_INST_J);
             pc += imm;
+            log_branch(m_pc, pc, true);
             rd = 0;
         }
         // C.BEQZ
@@ -2338,10 +2379,12 @@ void rv64::execute(void)
 
             DPRINTF(LOG_INST,("%016llx: c.beqz r%d, %d\n", pc, rs1, imm));
             INST_STAT(ENUM_INST_BEQ);
-            if (reg_rs1 == 0)
+            bool take_branch = (reg_rs1 == 0);
+            if (take_branch)
                 pc += imm;
             else
                 pc += 2;
+            log_branch(m_pc, pc, take_branch);
             rd = 0;
         }
         // C.BNEZ
@@ -2350,10 +2393,12 @@ void rv64::execute(void)
             uint64_t imm = rvc.b_imm();
             DPRINTF(LOG_INST,("%016llx: c.bnez r%d, %d\n", pc, rs1, imm));
             INST_STAT(ENUM_INST_BNE);
-            if (reg_rs1 != 0)
+            bool take_branch = (reg_rs1 != 0);
+            if (take_branch)
                 pc += imm;
             else
                 pc += 2;
+            log_branch(m_pc, pc, take_branch);
             rd = 0;
         }
         // Illegal instruction
@@ -2430,6 +2475,10 @@ void rv64::execute(void)
                     DPRINTF(LOG_INST,("%016llx: c.jr r%d\n", pc, rs1));
                     INST_STAT(ENUM_INST_J);
                     pc = reg_rs1 & ~1;
+                    if (rs1 == RISCV_REG_RA)
+                        log_branch_ret(m_pc, pc);
+                    else
+                        log_branch(m_pc, pc, true);
                 }
                 // C.MV
                 else
@@ -2461,6 +2510,10 @@ void rv64::execute(void)
                     INST_STAT(ENUM_INST_JALR);
                     reg_rd = pc + 2;
                     pc     = reg_rs1 & ~1;
+                    if (rs1 == RISCV_REG_RA)
+                        log_branch_ret(m_pc, pc);
+                    else
+                        log_branch_call(m_pc, pc);
                 }
                 // C.ADD
                 else
@@ -2527,7 +2580,7 @@ void rv64::execute(void)
         m_gpr[rd] = reg_rd;
 
     // Monitor executed instructions
-    commit_pc(m_pc_x);
+    log_commit_pc(m_pc_x);
 
     // Pending interrupt
     if (!take_exception && (m_csr_mip & m_csr_mie))

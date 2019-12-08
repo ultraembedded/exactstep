@@ -87,7 +87,11 @@ public:
     virtual void      enable_trace(uint32_t mask) { m_trace = mask; }
 
     // Monitor executed instructions
-    virtual void      commit_pc(uint64_t pc) { }
+    virtual void      log_exception(uint64_t src, uint64_t dst, uint64_t cause) { }
+    virtual void      log_branch(uint64_t src, uint64_t dst, bool taken) { }
+    virtual void      log_branch_call(uint64_t src, uint64_t dst) { }
+    virtual void      log_branch_ret(uint64_t src, uint64_t dst) { }
+    virtual void      log_commit_pc(uint64_t pc) { }
 
     // Stats
     virtual void      stats_reset(void) = 0;
