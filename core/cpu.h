@@ -89,6 +89,7 @@ public:
     // Monitor executed instructions
     virtual void      log_exception(uint64_t src, uint64_t dst, uint64_t cause) { }
     virtual void      log_branch(uint64_t src, uint64_t dst, bool taken) { }
+    virtual void      log_branch_jump(uint64_t src, uint64_t dst) { }
     virtual void      log_branch_call(uint64_t src, uint64_t dst) { }
     virtual void      log_branch_ret(uint64_t src, uint64_t dst) { }
     virtual void      log_commit_pc(uint64_t pc) { }

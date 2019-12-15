@@ -1021,7 +1021,7 @@ void rv32::execute(void)
         if (rd == RISCV_REG_RA)
             log_branch_call(m_pc, pc);
         else
-            log_branch(m_pc, pc, true);
+            log_branch_jump(m_pc, pc);
 
         m_stats[STATS_BRANCHES]++;
     }
@@ -1037,7 +1037,7 @@ void rv32::execute(void)
         else if (rd == RISCV_REG_RA)
             log_branch_call(m_pc, pc);
         else
-            log_branch(m_pc, pc, true);
+            log_branch_jump(m_pc, pc);
 
         m_stats[STATS_BRANCHES]++;        
     }
@@ -1937,7 +1937,7 @@ void rv32::execute(void)
             INST_STAT(ENUM_INST_J);
             pc += imm;
             rd = 0;
-            log_branch(m_pc, pc, true);
+            log_branch_jump(m_pc, pc);
         }
         // C.BEQZ
         else if ((opcode >> 13) == 6)
@@ -2039,7 +2039,7 @@ void rv32::execute(void)
                     if (rs1 == RISCV_REG_RA)
                         log_branch_ret(m_pc, pc);
                     else
-                        log_branch(m_pc, pc, true);
+                        log_branch_jump(m_pc, pc);
                 }
                 // C.MV
                 else

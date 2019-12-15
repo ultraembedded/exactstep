@@ -1080,7 +1080,7 @@ void rv64::execute(void)
         if (rd == RISCV_REG_RA)
             log_branch_call(m_pc, pc);
         else
-            log_branch(m_pc, pc, true);
+            log_branch_jump(m_pc, pc);
 
         m_stats[STATS_BRANCHES]++;
     }
@@ -1096,7 +1096,7 @@ void rv64::execute(void)
         else if (rd == RISCV_REG_RA)
             log_branch_call(m_pc, pc);
         else
-            log_branch(m_pc, pc, true);
+            log_branch_jump(m_pc, pc);
 
         m_stats[STATS_BRANCHES]++;        
     }
@@ -2369,7 +2369,7 @@ void rv64::execute(void)
             DPRINTF(LOG_INST,("%016llx: c.j 0x%08x\n", pc, pc + imm));
             INST_STAT(ENUM_INST_J);
             pc += imm;
-            log_branch(m_pc, pc, true);
+            log_branch_jump(m_pc, pc);
             rd = 0;
         }
         // C.BEQZ
@@ -2478,7 +2478,7 @@ void rv64::execute(void)
                     if (rs1 == RISCV_REG_RA)
                         log_branch_ret(m_pc, pc);
                     else
-                        log_branch(m_pc, pc, true);
+                        log_branch_jump(m_pc, pc);
                 }
                 // C.MV
                 else
