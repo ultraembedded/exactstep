@@ -141,6 +141,7 @@ int main(int argc, char *argv[])
     int            trace          = 0;
     uint32_t       trace_mask     = 1;
     uint32_t       stop_pc        = 0xFFFFFFFF;
+    char *         stop_pc_sym    = NULL;
     uint32_t       trace_pc       = 0xFFFFFFFF;
     uint32_t       mem_base       = 0x00000000;
     uint32_t       mem_size       = (32 * 1024 * 1024);
@@ -166,7 +167,10 @@ int main(int argc, char *argv[])
                 trace_mask = strtoul(optarg, NULL, 0);
                 break;
             case 'r':
-                stop_pc = strtoul(optarg, NULL, 0);
+                if (!strncmp(optarg, "0x", 2))
+                    stop_pc = strtoul(optarg, NULL, 0);
+                else
+                    stop_pc_sym = optarg;
                 break;
             case 'f':
                 filename = optarg;
@@ -292,6 +296,8 @@ int main(int argc, char *argv[])
             dump_start = sym_addr;
         if (dump_sym_end && elf.get_symbol(dump_sym_end, sym_addr))
             dump_end = sym_addr;
+        if (stop_pc_sym && elf.get_symbol(stop_pc_sym, sym_addr))
+            stop_pc = sym_addr;
     }
 
     // Reset CPU to given start PC
