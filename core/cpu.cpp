@@ -234,6 +234,40 @@ uint32_t cpu::read32(uint32_t address)
     return 0;
 }
 //-----------------------------------------------------------------
+// ifetch32: Read a instruction from memory (physical address)
+//-----------------------------------------------------------------
+uint32_t cpu::ifetch32(uint32_t address)
+{
+    address &= ~3;
+
+    for (memory_base *mem = m_memories; mem != NULL; mem = mem->next)
+        if (mem->valid_addr(address))
+        {
+            uint32_t data = 0;
+            mem->ifetch32(address, data);
+            return data;
+        }
+
+    return 0;
+}
+//-----------------------------------------------------------------
+// ifetch16: Read a instruction from memory (physical address)
+//-----------------------------------------------------------------
+uint16_t cpu::ifetch16(uint32_t address)
+{
+    address &= ~1;
+
+    for (memory_base *mem = m_memories; mem != NULL; mem = mem->next)
+        if (mem->valid_addr(address))
+        {
+            uint16_t data = 0;
+            mem->ifetch16(address, data);
+            return data;
+        }
+
+    return 0;
+}
+//-----------------------------------------------------------------
 // step: Step through one instruction
 //-----------------------------------------------------------------
 void cpu::step(void)

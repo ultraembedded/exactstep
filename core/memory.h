@@ -106,6 +106,13 @@ public:
         return res;
     }
 
+    // Instruction access
+    virtual bool ifetch32(uint32_t addr, uint32_t &data)
+    { return read32(addr, data); }
+
+    virtual bool ifetch16(uint32_t addr, uint16_t &data)
+    { return read16(addr, data); }
+
     // Min access width
     virtual int min_access_size(void) { return 1; }
 

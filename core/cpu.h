@@ -35,6 +35,8 @@ public:
     virtual uint16_t  read16(uint32_t address);    
     virtual void      write32(uint32_t address, uint32_t data);
     virtual uint32_t  read32(uint32_t address);
+    virtual uint32_t  ifetch32(uint32_t address);
+    virtual uint16_t  ifetch16(uint32_t address);
 
     // Attach peripherals
     virtual bool      attach_device(device * device);

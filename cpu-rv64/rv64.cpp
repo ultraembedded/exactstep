@@ -194,12 +194,11 @@ uint32_t rv64::get_opcode(uint64_t address)
     // 2 byte aligned addresses are supported if RVC
     if (m_enable_rvc && (address & 2))
     {
-        uint32_t opcode = read32(address & ~3);
-        opcode >>= 16;
-        return (read32((address+4) & ~3) << 16) | opcode;
+        uint16_t opcode = ifetch16(address);
+        return (ifetch16((address+2)) << 16) | opcode;
     }
     else
-        return read32(address);
+        return ifetch32(address);
 }
 //-----------------------------------------------------------------
 // mmu_read_word: Read a word from memory
