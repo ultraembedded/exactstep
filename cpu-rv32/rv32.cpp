@@ -463,11 +463,9 @@ int rv32::load(uint32_t pc, uint32_t address, uint32_t *result, int width, bool 
                     break;
                 case 2:
                 {
-                    uint8_t db = 0;
-                    mem->read8(physical + 0, db);
-                    *result |= ((uint32_t)db << 0);
-                    mem->read8(physical + 1, db);
-                    *result |= ((uint32_t)db << 8);
+                    uint16_t dh = 0;
+                    mem->read16(physical, dh);
+                    *result |= dh;
 
                     if (signedLoad && ((*result) & (1 << 15)))
                          *result |= 0xFFFF0000;
@@ -532,11 +530,10 @@ int rv32::store(uint32_t pc, uint32_t address, uint32_t data, int width)
                     mem->write32(physical, data);
                     break;
                 case 2:
-                    mem->write8(physical + 0, data >> 0);
-                    mem->write8(physical + 1, data >> 8);
+                    mem->write16(physical, data & 0xFFFF);
                     break;
                 case 1:
-                    mem->write8(physical + 0, data & 0xFF);
+                    mem->write8(physical, data & 0xFF);
                     break;
                 default:
                     assert(!"Invalid");
