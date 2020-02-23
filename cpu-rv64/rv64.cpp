@@ -2658,6 +2658,33 @@ void rv64::set_interrupt(int irq)
     else
         m_csr_mip |= SR_IP_MTIP;
 
+#ifdef CPU_INTERRUPT_ON_SET
+    // Pending interrupt
+    if (m_csr_mip & m_csr_mie)
+    {
+        uint64_t pending_interrupts = (m_csr_mip & m_csr_mie);
+        uint64_t m_enabled          = m_csr_mpriv < PRIV_MACHINE || (m_csr_mpriv == PRIV_MACHINE && (m_csr_msr & SR_MIE));
+        uint64_t s_enabled          = m_csr_mpriv < PRIV_SUPER   || (m_csr_mpriv == PRIV_SUPER   && (m_csr_msr & SR_SIE));
+        uint64_t m_interrupts       = pending_interrupts & ~m_csr_mideleg & -m_enabled;
+        uint64_t s_interrupts       = pending_interrupts & m_csr_mideleg & -s_enabled;
+        uint64_t interrupts         = m_interrupts ? m_interrupts : s_interrupts;
+
+        // Interrupt pending and mask enabled
+        if (interrupts)
+        {
+            for (int i=IRQ_MIN;i<IRQ_MAX;i++)
+            {
+                if (interrupts & (1 << i))
+                {
+                    // Only service one interrupt per cycle
+                    DPRINTF(LOG_INST,( "Interrupt%d taken...\n", i));
+                    exception(MCAUSE_INTERRUPT + i, m_pc);
+                    break;
+                }
+            }
+        }
+    }
+#endif
 }
 //-----------------------------------------------------------------
 // clr_interrupt: Clear interrupt pending
