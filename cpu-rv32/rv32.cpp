@@ -2206,7 +2206,11 @@ void rv32::set_interrupt(int irq)
 {
     assert(irq == IRQ_M_EXT || irq == IRQ_M_TIMER);
     if (irq == IRQ_M_EXT)
+#ifdef CPU_INTERRUPT_MEIP_ONLY
+        m_csr_mip |= (SR_IP_MEIP);
+#else
         m_csr_mip |= (SR_IP_MEIP | SR_IP_SEIP);
+#endif
     else
         m_csr_mip |= SR_IP_MTIP;
 
