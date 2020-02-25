@@ -618,6 +618,20 @@ bool rv64::access_csr(uint64_t address, uint64_t data, bool set, bool clr, uint6
     } \
     break;
 
+#define CSR_STDS(name, var_name) \
+    case CSR_ ##name: \
+    { \
+        data       &= CSR_ ##name## _MASK; \
+        result      = var_name & CSR_ ##name## _MASK; \
+        if (set && clr) \
+            var_name  = (var_name & ~CSR_ ##name## _MASK) | data; \
+        else if (set) \
+            var_name |= data; \
+        else if (clr) \
+            var_name &= ~data; \
+    } \
+    break;
+
 #define CSR_STDx(name, var_name, cval) \
     case CSR_ ##name: \
     { \
@@ -744,12 +758,12 @@ bool rv64::access_csr(uint64_t address, uint64_t data, bool set, bool clr, uint6
         CSR_STD(SEPC,    m_csr_sepc)
         CSR_STD(STVEC,   m_csr_sevec)
         CSR_STD(SCAUSE,  m_csr_scause)
-        CSR_STD(SIP,     m_csr_mip)
-        CSR_STD(SIE,     m_csr_mie)
+        CSR_STDS(SIP,    m_csr_mip)
+        CSR_STDS(SIE,    m_csr_mie)
         CSR_STD(SATP,    m_csr_satp)
         CSR_STD(STVAL,   m_csr_stval)
         CSR_STD(SSCRATCH,m_csr_sscratch)
-        CSR_STD(SSTATUS, m_csr_msr)
+        CSR_STDS(SSTATUS, m_csr_msr)
         //--------------------------------------------------------
         // Extensions
         //-------------------------------------------------------- 
