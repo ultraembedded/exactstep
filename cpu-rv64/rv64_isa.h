@@ -719,6 +719,10 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 #define CSR_MHARTID_MASK  0xFFFFFFFFFFFFFFFFULL
     #define MHARTID_VALUE 0
 
+// Non-std
+#define CSR_MTIMECMP        0x7c0
+#define CSR_MTIMECMP_MASK   0xFFFFFFFFFFFFFFFFULL
+
 //--------------------------------------------------------------------
 // CSR Registers - Supervisor
 //--------------------------------------------------------------------

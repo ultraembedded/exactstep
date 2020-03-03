@@ -36,6 +36,7 @@ rv64::rv64(uint32_t baseAddr /*= 0*/, uint32_t len /*= 0*/): cpu()
     m_enable_rvm         = true;
     m_enable_rvc         = true;
     m_enable_rva         = true;
+    m_enable_mtimecmp    = false;
 
     // Some memory defined
     if (len != 0)
@@ -67,7 +68,7 @@ void rv64::set_register(int r, uint64_t val)
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIE)) m_csr_mie = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIP)) m_csr_mip = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MTIME)) m_csr_mtime = val;
-    else if (r == (RISCV_REGNO_CSR0 + CSR_MTIMEH)) m_csr_mtimecmp = val; // Non-std
+    else if (r == (RISCV_REGNO_CSR0 + CSR_MTIMECMP)) m_csr_mtimecmp = val; // Non-std
     else if (r == (RISCV_REGNO_CSR0 + CSR_MSCRATCH)) m_csr_mscratch = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIDELEG)) m_csr_mideleg = val;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MEDELEG)) m_csr_medeleg = val;
@@ -96,7 +97,7 @@ uint32_t rv64::get_register(int r)
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIP)) return m_csr_mip;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MCYCLE)) return m_csr_mtime;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MTIME)) return m_csr_mtime;
-    else if (r == (RISCV_REGNO_CSR0 + CSR_MTIMEH)) return m_csr_mtimecmp; // Non-std
+    else if (r == (RISCV_REGNO_CSR0 + CSR_MTIMECMP)) return m_csr_mtimecmp; // Non-std
     else if (r == (RISCV_REGNO_CSR0 + CSR_MSCRATCH)) return m_csr_mscratch;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIDELEG)) return m_csr_mideleg;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MEDELEG)) return m_csr_medeleg;
@@ -126,7 +127,7 @@ uint64_t rv64::get_register64(int r)
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIP)) return m_csr_mip;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MCYCLE)) return m_csr_mtime;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MTIME)) return m_csr_mtime;
-    else if (r == (RISCV_REGNO_CSR0 + CSR_MTIMEH)) return m_csr_mtimecmp; // Non-std
+    else if (r == (RISCV_REGNO_CSR0 + CSR_MTIMECMP)) return m_csr_mtimecmp; // Non-std
     else if (r == (RISCV_REGNO_CSR0 + CSR_MSCRATCH)) return m_csr_mscratch;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MIDELEG)) return m_csr_mideleg;
     else if (r == (RISCV_REGNO_CSR0 + CSR_MEDELEG)) return m_csr_medeleg;
@@ -165,6 +166,7 @@ void rv64::reset(uint32_t start_addr)
     m_csr_mtval    = 0;
     m_csr_mtime    = 0;
     m_csr_mtimecmp = 0;
+    m_csr_mtime_ie = false;
     m_csr_mscratch = 0;
 
     m_csr_sepc     = 0;
@@ -768,28 +770,33 @@ bool rv64::access_csr(uint64_t address, uint64_t data, bool set, bool clr, uint6
         // Extensions
         //-------------------------------------------------------- 
         case CSR_MTIME:
-            data       &= CSR_MTIME_MASK;
             result      = m_csr_mtime;
-
-            // Non-std behaviour - write to CSR_TIME gives next interrupt threshold            
-            if (!m_compliant_csr && set)
-            {
-                m_csr_mtimecmp = data;
-
-                // Clear interrupt pending
-                if (m_csr_mideleg & SR_IP_STIP)
-                    m_csr_mip &= ~SR_IP_STIP;
-                else
-                    m_csr_mip &= ~SR_IP_MTIP;
-            }
             break;
-    
         case CSR_MTIMEH:
-            result      = m_csr_mtime >> 32;
+            result      = 0;
             break;
        case CSR_MCYCLE:
             result      = m_csr_mtime;
             break;
+
+        // Non-std behaviour
+        case CSR_MTIMECMP:
+            data       &= CSR_MTIMECMP_MASK;
+            result      = m_csr_mtimecmp & CSR_MTIMECMP_MASK;
+            if (set && clr)
+                m_csr_mtimecmp  = data;
+            else if (set)
+                m_csr_mtimecmp |= data;
+            else if (clr)
+                m_csr_mtimecmp &= ~data;
+
+            // Enable mtimecmp interrupt
+            if (set || clr)
+                m_csr_mtime_ie = true;
+
+            m_enable_mtimecmp = true;
+            break;
+
         default:
             error(false, "*** CSR address not supported %08x [PC=%08x]\n", address, m_pc);
             break;
@@ -2580,9 +2587,7 @@ void rv64::execute(void)
     }
     else
     {
-        error(false, "Bad instruction @ %x (opcode %x)\n", pc, opcode);
         exception(MCAUSE_ILLEGAL_INSTRUCTION, pc, opcode);
-        m_fault        = true;
         take_exception = true;
     }
 
@@ -2638,13 +2643,14 @@ void rv64::step(void)
     // Increment timer counter
     m_csr_mtime++;
 
-    // Timer should generate a interrupt?
-    if (!m_compliant_csr)
+    // Non-std: Timer should generate an internal interrupt?
+    if (m_enable_mtimecmp)
     {
-        // Limited internal timer, truncate to 32-bits
-        m_csr_mtime &= 0xFFFFFFFF;
-        if (m_csr_mtime == m_csr_mtimecmp)
-            m_csr_mip |= (SR_IP_STIP | SR_IP_MTIP);
+        if (m_csr_mtime == m_csr_mtimecmp && m_csr_mtime_ie)
+        {
+            m_csr_mip     |= SR_IP_MTIP;
+            m_csr_mtime_ie = false;
+        }
     }
 
     // Dump state
@@ -2673,7 +2679,7 @@ void rv64::set_interrupt(int irq)
 #else
         m_csr_mip |= (SR_IP_MEIP | SR_IP_SEIP);
 #endif
-    else
+    else if (!m_enable_mtimecmp)
         m_csr_mip |= SR_IP_MTIP;
 
 #ifdef CPU_INTERRUPT_ON_SET
@@ -2710,7 +2716,7 @@ void rv64::set_interrupt(int irq)
 void rv64::clr_interrupt(int irq)
 {
     assert(irq == IRQ_M_TIMER);
-    if (irq == IRQ_M_TIMER)
+    if (irq == IRQ_M_TIMER && !m_enable_mtimecmp)
         m_csr_mip &= ~SR_IP_MTIP;
 }
 //-----------------------------------------------------------------

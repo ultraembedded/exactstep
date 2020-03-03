@@ -102,6 +102,7 @@ private:
     uint64_t            m_csr_mip;
     uint64_t            m_csr_mtime;
     uint64_t            m_csr_mtimecmp;
+    bool                m_csr_mtime_ie;
     uint64_t            m_csr_mscratch;
     uint64_t            m_csr_mideleg;
     uint64_t            m_csr_medeleg;
@@ -125,6 +126,7 @@ private:
     bool                m_enable_rvm;
     bool                m_enable_rvc;
     bool                m_enable_rva;
+    bool                m_enable_mtimecmp;
 
     // Stats
     uint32_t            m_stats[STATS_MAX];

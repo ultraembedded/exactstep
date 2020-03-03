@@ -86,7 +86,8 @@ private:
     uint32_t            m_csr_mie;
     uint32_t            m_csr_mip;
     uint64_t            m_csr_mtime;
-    uint64_t            m_csr_mtimecmp;
+    uint32_t            m_csr_mtimecmp;
+    bool                m_csr_mtime_ie;
     uint32_t            m_csr_mscratch;
     uint32_t            m_csr_mideleg;
     uint32_t            m_csr_medeleg;
@@ -110,6 +111,7 @@ private:
     bool                m_enable_rvm;
     bool                m_enable_rvc;
     bool                m_enable_rva;
+    bool                m_enable_mtimecmp;
 
     // Stats
     enum eStats

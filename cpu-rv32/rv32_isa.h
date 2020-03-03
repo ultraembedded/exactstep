@@ -600,6 +600,10 @@ static const char * inst_names[ENUM_INST_MAX+1] =
 #define CSR_DINVALIDATE       CSR_PMPCFG2
 #define CSR_DINVALIDATE_MASK  CSR_PMPCFG2_MASK
 
+// Non-std
+#define CSR_MTIMECMP        0x7c0
+#define CSR_MTIMECMP_MASK   0xFFFFFFFF
+
 //--------------------------------------------------------------------
 // CSR Registers - Supervisor
 //--------------------------------------------------------------------
