@@ -70,7 +70,7 @@ public:
     };    
 
 protected:  
-    void                execute(void);
+    bool                execute(void);
     int                 load(uint64_t pc, uint64_t address, uint64_t *result, int width, bool signedLoad);
     int                 store(uint64_t pc, uint64_t address, uint64_t data, int width);
     virtual bool        access_csr(uint64_t address, uint64_t data, bool set, bool clr, uint64_t &result);

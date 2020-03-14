@@ -44,6 +44,8 @@ static struct option long_options[] =
     {"dump-file",  required_argument, 0, 'p'},
     {"dump-start", required_argument, 0, 'j'},
     {"dump-end",   required_argument, 0, 'k'},
+    {"dump-reg-f", required_argument, 0, 'R'},
+    {"dump-reg-s", required_argument, 0, 'S'},
     {"help",       no_argument,       0, 'h'},
     {0, 0, 0, 0}
 };
@@ -65,6 +67,8 @@ static void help_options(void)
     fprintf (stderr,"  --dump-file  | -p FILE       File to dump memory contents to after completion\n");
     fprintf (stderr,"  --dump-start | -j SYM/A      Symbol name for memory dump start (or 0xADDR)\n");
     fprintf (stderr,"  --dump-end   | -k SYM/A      Symbol name for memory dump end (or 0xADDR)\n");
+    fprintf (stderr,"  --dump-reg-f | -R FILE       File to dump register file contents to after completion\n");
+    fprintf (stderr,"  --dump-reg-s | -S NUM        Number of register file entries to dump\n");
     exit(-1);
 }
 //-----------------------------------------------------------------
@@ -129,6 +133,91 @@ static bool create_dump_file(cpu *sim, const char *dump_file, uint32_t dump_star
     return true;
 }
 //-----------------------------------------------------------------
+// create_dump_regfile: Dump register file contents
+//-----------------------------------------------------------------
+static bool create_dump_regfile(cpu *sim, const char *dump_file, uint32_t dump_num)
+{
+    // Nothing to do...
+    if (dump_num == 0 || !dump_file)
+        return false;
+
+    const char *ext = strrchr(dump_file, '.');
+    bool sig_txt_file = ext && !strcmp(ext, ".txt");
+
+    printf("Dumping post simulation registers: %s\n", dump_file);
+
+    // 64-bit
+    if (sim->get_reg_width() == 64)
+    {
+        uint64_t *buffer = new uint64_t[dump_num];
+        for (uint32_t i=0;i<dump_num;i++)
+            buffer[i] = sim->get_register(i);
+
+        // Binary block
+        if (!sig_txt_file)
+        {
+            // Write file data
+            FILE *f = fopen(dump_file, "wb");
+            if (f)
+            {
+                fwrite(buffer, sizeof(buffer[0]), dump_num, f);
+                fclose(f);
+            }
+        }
+        // Text file
+        else
+        {
+            // Write file data
+            FILE *f = fopen(dump_file, "w");
+            if (f)
+            {
+                for (uint32_t i=0;i<dump_num;i++)
+                    fprintf(f, "%16llx\n", buffer[i]);
+                fclose(f);
+            }
+        }
+
+        delete[] buffer;
+        buffer = NULL;
+    }
+    // 32-bit
+    else
+    {
+        uint32_t *buffer = new uint32_t[dump_num];
+        for (uint32_t i=0;i<dump_num;i++)
+            buffer[i] = sim->get_register(i);
+
+        // Binary block
+        if (!sig_txt_file)
+        {
+            // Write file data
+            FILE *f = fopen(dump_file, "wb");
+            if (f)
+            {
+                fwrite(buffer, sizeof(buffer[0]), dump_num, f);
+                fclose(f);
+            }
+        }
+        // Text file
+        else
+        {
+            // Write file data
+            FILE *f = fopen(dump_file, "w");
+            if (f)
+            {
+                for (uint32_t i=0;i<dump_num;i++)
+                    fprintf(f, "%08x\n", buffer[i]);
+                fclose(f);
+            }
+        }
+
+        delete[] buffer;
+        buffer = NULL;
+    }
+
+    return true;
+}
+//-----------------------------------------------------------------
 // main
 //-----------------------------------------------------------------
 int main(int argc, char *argv[])
@@ -153,6 +242,8 @@ int main(int argc, char *argv[])
     char *         dump_sym_end   = NULL;
     uint32_t       dump_start     = 0;
     uint32_t       dump_end       = 0;
+    char *         dump_reg_file  = NULL;
+    uint32_t       dump_reg_num   = 32;
     int c;
 
     int option_index = 0;
@@ -212,6 +303,12 @@ int main(int argc, char *argv[])
                     dump_end = strtoul(optarg, NULL, 0);
                 else
                     dump_sym_end = optarg;
+                break;
+            case 'R':
+                dump_reg_file = optarg;
+                break;
+            case 'S':
+                dump_reg_num = strtoul(optarg, NULL, 0);
                 break;
             case '?':
             default:
@@ -336,6 +433,8 @@ int main(int argc, char *argv[])
         // Dump memory contents after execution?
         if (dump_file)
             create_dump_file(sim, dump_file, dump_start, dump_end);
+        if (dump_reg_file)
+            create_dump_regfile(sim, dump_reg_file, dump_reg_num);
 
         sim->stats_dump();
         return 0;

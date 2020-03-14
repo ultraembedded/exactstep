@@ -681,6 +681,7 @@ bool rv64::access_csr(uint64_t address, uint64_t data, bool set, bool clr, uint6
         // Simulation control
         //--------------------------------------------------------
         case CSR_DSCRATCH:
+        case CSR_SIM_CTRL:
             switch (data & 0xFF000000)
             {
                 case CSR_SIM_CTRL_EXIT:
@@ -886,19 +887,19 @@ void rv64::exception(uint64_t cause, uint64_t pc, uint64_t badaddr /*= 0*/)
 //-----------------------------------------------------------------
 // execute: Instruction execution stage
 //-----------------------------------------------------------------
-void rv64::execute(void)
+bool rv64::execute(void)
 {
     uint64_t phy_pc = m_pc;
 
     // Translate PC to physical address
     if (!mmu_i_translate(m_pc, &phy_pc))
-        return ;
+        return false;
 
     // Misaligned PC
     if ((!m_enable_rvc && (m_pc & 3)) || (m_enable_rvc && (m_pc & 1)))
     {
         exception(MCAUSE_MISALIGNED_FETCH, m_pc, m_pc);
-        return;
+        return false;
     }
 
     // Get opcode at current PC
@@ -1232,7 +1233,7 @@ void rv64::execute(void)
         if (load(pc, reg_rs1 + imm12, &reg_rd, 1, true))
             pc += 4;
         else
-            return;
+            return false;
     }
     else if ((opcode & INST_LH_MASK) == INST_LH)
     {
@@ -1241,7 +1242,7 @@ void rv64::execute(void)
         if (load(pc, reg_rs1 + imm12, &reg_rd, 2, true))
             pc += 4;
         else
-            return;
+            return false;
     }
     else if ((opcode & INST_LW_MASK) == INST_LW)
     {
@@ -1250,7 +1251,7 @@ void rv64::execute(void)
         if (load(pc, reg_rs1 + imm12, &reg_rd, 4, true))
             pc += 4;
         else
-            return;
+            return false;
     }
     else if ((opcode & INST_LBU_MASK) == INST_LBU)
     {
@@ -1259,7 +1260,7 @@ void rv64::execute(void)
         if (load(pc, reg_rs1 + imm12, &reg_rd, 1, false))
             pc += 4;
         else
-            return;
+            return false;
     }
     else if ((opcode & INST_LHU_MASK) == INST_LHU)
     {
@@ -1268,7 +1269,7 @@ void rv64::execute(void)
         if (load(pc, reg_rs1 + imm12, &reg_rd, 2, false))
             pc += 4;
         else
-            return;
+            return false;
     }
     else if ((opcode & INST_LWU_MASK) == INST_LWU)
     {
@@ -1277,7 +1278,7 @@ void rv64::execute(void)
         if (load(pc, reg_rs1 + imm12, &reg_rd, 4, false))
             pc += 4;
         else
-            return;
+            return false;
     }
     else if ((opcode & INST_SB_MASK) == INST_SB)
     {
@@ -1286,7 +1287,7 @@ void rv64::execute(void)
         if (store(pc, reg_rs1 + storeimm, reg_rs2, 1))
             pc += 4;
         else
-            return ;
+            return false;
 
         // No writeback
         rd = 0;
@@ -1298,7 +1299,7 @@ void rv64::execute(void)
         if (store(pc, reg_rs1 + storeimm, reg_rs2, 2))
             pc += 4;
         else
-            return ;
+            return false;
 
         // No writeback
         rd = 0;
@@ -1310,7 +1311,7 @@ void rv64::execute(void)
         if (store(pc, reg_rs1 + storeimm, reg_rs2, 4))
             pc += 4;
         else
-            return ;
+            return false;
 
         // No writeback
         rd = 0;
@@ -1549,7 +1550,7 @@ void rv64::execute(void)
         if (store(pc, reg_rs1 + storeimm, reg_rs2, 8))
             pc += 4;
         else
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_SD);
 
@@ -1563,7 +1564,7 @@ void rv64::execute(void)
         if (load(pc, reg_rs1 + imm12, &reg_rd, 8, true))
             pc += 4;
         else
-            return;
+            return false;
 
         INST_STAT(ENUM_INST_LD);
     }
@@ -1718,14 +1719,14 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 4, true))
-            return;
+            return false;
 
         // Modify
         uint32_t val = reg_rd + reg_rs2;
 
         // Write
         if (!store(pc, reg_rs1, val, 4))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_ADD);
         INST_STAT(ENUM_INST_LW);
@@ -1738,14 +1739,14 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 4, true))
-            return;
+            return false;
 
         // Modify
         uint32_t val = reg_rd ^ reg_rs2;
 
         // Write
         if (!store(pc, reg_rs1, val, 4))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_XOR);
         INST_STAT(ENUM_INST_LW);
@@ -1758,14 +1759,14 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 4, true))
-            return;
+            return false;
 
         // Modify
         uint32_t val = reg_rd | reg_rs2;
 
         // Write
         if (!store(pc, reg_rs1, val, 4))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_OR);
         INST_STAT(ENUM_INST_LW);
@@ -1778,14 +1779,14 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 4, true))
-            return;
+            return false;
 
         // Modify
         uint32_t val = reg_rd & reg_rs2;
 
         // Write
         if (!store(pc, reg_rs1, val, 4))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_AND);
         INST_STAT(ENUM_INST_LW);
@@ -1798,7 +1799,7 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 4, true))
-            return;
+            return false;
 
         // Modify
         uint32_t val = reg_rs2;
@@ -1807,7 +1808,7 @@ void rv64::execute(void)
 
         // Write
         if (!store(pc, reg_rs1, val, 4))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_LW);
         INST_STAT(ENUM_INST_SW);
@@ -1819,7 +1820,7 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 4, true))
-            return;
+            return false;
 
         // Modify
         uint32_t val = reg_rs2;
@@ -1828,7 +1829,7 @@ void rv64::execute(void)
 
         // Write
         if (!store(pc, reg_rs1, val, 4))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_LW);
         INST_STAT(ENUM_INST_SW);
@@ -1840,7 +1841,7 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 4, true))
-            return;
+            return false;
 
         // Modify
         uint32_t val = reg_rs2;
@@ -1849,7 +1850,7 @@ void rv64::execute(void)
 
         // Write
         if (!store(pc, reg_rs1, val, 4))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_LW);
         INST_STAT(ENUM_INST_SW);
@@ -1861,7 +1862,7 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 4, true))
-            return;
+            return false;
 
         // Modify
         uint32_t val = reg_rs2;
@@ -1870,7 +1871,7 @@ void rv64::execute(void)
 
         // Write
         if (!store(pc, reg_rs1, val, 4))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_LW);
         INST_STAT(ENUM_INST_SW);
@@ -1882,11 +1883,11 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 4, true))
-            return;
+            return false;
 
         // Write
         if (!store(pc, reg_rs1, reg_rs2, 4))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_LW);
         INST_STAT(ENUM_INST_SW);
@@ -1896,7 +1897,7 @@ void rv64::execute(void)
     {
         DPRINTF(LOG_INST,("%016llx: lr.w r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         if (!load(pc, reg_rs1, &reg_rd, 4, true))
-            return;
+            return false;
 
         // Record load address
         m_load_res = reg_rs1;
@@ -1911,7 +1912,7 @@ void rv64::execute(void)
         {
             // Write
             if (!store(pc, reg_rs1, reg_rs2, 4))
-                return ;
+                return false;
 
             reg_rd = 0;
         }
@@ -1927,14 +1928,14 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 8, true))
-            return;
+            return false;
 
         // Modify
         uint64_t val = reg_rd + reg_rs2;
 
         // Write
         if (!store(pc, reg_rs1, val, 8))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_ADD);
         INST_STAT(ENUM_INST_LD);
@@ -1947,14 +1948,14 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 8, true))
-            return;
+            return false;
 
         // Modify
         uint64_t val = reg_rd ^ reg_rs2;
 
         // Write
         if (!store(pc, reg_rs1, val, 8))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_XOR);
         INST_STAT(ENUM_INST_LD);
@@ -1967,14 +1968,14 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 8, true))
-            return;
+            return false;
 
         // Modify
         uint64_t val = reg_rd | reg_rs2;
 
         // Write
         if (!store(pc, reg_rs1, val, 8))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_OR);
         INST_STAT(ENUM_INST_LD);
@@ -1987,14 +1988,14 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 8, true))
-            return;
+            return false;
 
         // Modify
         uint64_t val = reg_rd & reg_rs2;
 
         // Write
         if (!store(pc, reg_rs1, val, 8))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_AND);
         INST_STAT(ENUM_INST_LD);
@@ -2007,7 +2008,7 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 8, true))
-            return;
+            return false;
 
         // Modify
         uint64_t val = reg_rs2;
@@ -2016,7 +2017,7 @@ void rv64::execute(void)
 
         // Write
         if (!store(pc, reg_rs1, val, 8))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_LD);
         INST_STAT(ENUM_INST_SD);
@@ -2028,7 +2029,7 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 8, true))
-            return;
+            return false;
 
         // Modify
         uint64_t val = reg_rs2;
@@ -2037,7 +2038,7 @@ void rv64::execute(void)
 
         // Write
         if (!store(pc, reg_rs1, val, 8))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_LD);
         INST_STAT(ENUM_INST_SD);
@@ -2049,7 +2050,7 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 8, true))
-            return;
+            return false;
 
         // Modify
         uint64_t val = reg_rs2;
@@ -2058,7 +2059,7 @@ void rv64::execute(void)
 
         // Write
         if (!store(pc, reg_rs1, val, 8))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_LD);
         INST_STAT(ENUM_INST_SD);
@@ -2070,7 +2071,7 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 8, true))
-            return;
+            return false;
 
         // Modify
         uint64_t val = reg_rs2;
@@ -2079,7 +2080,7 @@ void rv64::execute(void)
 
         // Write
         if (!store(pc, reg_rs1, val, 8))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_LD);
         INST_STAT(ENUM_INST_SD);
@@ -2091,11 +2092,11 @@ void rv64::execute(void)
 
         // Read
         if (!load(pc, reg_rs1, &reg_rd, 8, true))
-            return;
+            return false;
 
         // Write
         if (!store(pc, reg_rs1, reg_rs2, 8))
-            return ;
+            return false;
 
         INST_STAT(ENUM_INST_LD);
         INST_STAT(ENUM_INST_SD);
@@ -2105,7 +2106,7 @@ void rv64::execute(void)
     {
         DPRINTF(LOG_INST,("%016llx: lr.d r%d, r%d, r%d\n", pc, rd, rs1, rs2));
         if (!load(pc, reg_rs1, &reg_rd, 8, true))
-            return;
+            return false;
 
         // Record load address
         m_load_res = reg_rs1;
@@ -2120,7 +2121,7 @@ void rv64::execute(void)
         {
             // Write
             if (!store(pc, reg_rs1, reg_rs2, 8))
-                return ;
+                return false;
 
             reg_rd = 0;
         }
@@ -2166,7 +2167,7 @@ void rv64::execute(void)
             if (load(pc, reg_rs1 + imm, &reg_rd, 4, true))
                 pc += 2;
             else
-                return;
+                return false;
         }
         // C.LD
         else if ((opcode >> 13) == 3)
@@ -2177,7 +2178,7 @@ void rv64::execute(void)
             if (load(pc, reg_rs1 + imm, &reg_rd, 8, true))
                 pc += 2;
             else
-                return;
+                return false;
         }
         // C.SW
         else if ((opcode >> 13) == 6)
@@ -2188,7 +2189,7 @@ void rv64::execute(void)
             if (store(pc, reg_rs1 + imm, reg_rs2, 4))
                 pc += 2;
             else
-                return ;
+                return false;
 
             // No writeback
             rd = 0;
@@ -2202,7 +2203,7 @@ void rv64::execute(void)
             if (store(pc, reg_rs1 + imm, reg_rs2, 8))
                 pc += 2;
             else
-                return ;
+                return false;
 
             // No writeback
             rd = 0;
@@ -2460,7 +2461,7 @@ void rv64::execute(void)
             if (load(pc, reg_rs1 + imm, &reg_rd, 4, true))
                 pc += 2;
             else
-                return;
+                return false;
         }
         // C.LDSP
         else if ((opcode >> 13) == 3)
@@ -2474,7 +2475,7 @@ void rv64::execute(void)
             if (load(pc, reg_rs1 + imm, &reg_rd, 8, true))
                 pc += 2;
             else
-                return;
+                return false;
         }
         // C.JR
         // C.MV
@@ -2554,7 +2555,7 @@ void rv64::execute(void)
             if (store(pc, reg_rs1 + uimm, reg_rs2, 4))
                 pc += 2;
             else
-                return ;
+                return false;
 
             // No writeback
             rd = 0;            
@@ -2571,7 +2572,7 @@ void rv64::execute(void)
             if (store(pc, reg_rs1 + uimm, reg_rs2, 8))
                 pc += 2;
             else
-                return ;
+                return false;
 
             // No writeback
             rd = 0; 
@@ -2629,6 +2630,8 @@ void rv64::execute(void)
 
     if (!take_exception)
         m_pc = pc;
+
+    return true;
 }
 //-----------------------------------------------------------------
 // step: Step through one instruction
@@ -2638,7 +2641,9 @@ void rv64::step(void)
     m_stats[STATS_INSTRUCTIONS]++;
 
     // Execute instruction at current PC
-    execute();
+    int max_steps = 2;
+    while (max_steps-- && !execute())
+        ;
 
     // Increment timer counter
     m_csr_mtime++;

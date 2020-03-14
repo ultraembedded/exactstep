@@ -55,7 +55,7 @@ public:
     void                enable_rva(bool en) { m_enable_rva = en; }
 
 protected:  
-    void                execute(void);
+    bool                execute(void);
     int                 load(uint32_t pc, uint32_t address, uint32_t *result, int width, bool signedLoad);
     int                 store(uint32_t pc, uint32_t address, uint32_t data, int width);
     virtual bool        access_csr(uint32_t address, uint32_t data, bool set, bool clr, uint32_t &result);
