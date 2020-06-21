@@ -27,6 +27,9 @@ extern "C"
 #include "device_timer_clint.h"
 #include "device_irq_ctrl.h"
 #include "device_irq_plic.h"
+#ifdef INCLUDE_SCREEN
+#include "device_frame_buffer.h"
+#endif
 #include "device_dummy.h"
 
 //-----------------------------------------------------------------
@@ -185,6 +188,22 @@ bool device_tree::load(cpu *cpu)
                     printf("|- Create SPI: Addr %08x IRQ %d\n", reg_addr, irq_num);
                     cpu->attach_device(new device_spi_lite(reg_addr, irq_ctrl, irq_num));
                 }
+#ifdef INCLUDE_SCREEN
+                else if (!strcmp(compat, "simple-framebuffer"))
+                {
+                    uint32_t width  = 640;
+                    uint32_t height = 480;
+                    const uint32_t *p_width = (const uint32_t*)fdt_getprop(m_fdt, offset, "width", &size);
+                    if (p_width)
+                        width = ntohl(*p_width);
+                    const uint32_t *p_height = (const uint32_t*)fdt_getprop(m_fdt, offset, "height", &size);
+                    if (p_height)
+                        height = ntohl(*p_height);
+
+                    printf("|- Create frame buffer: Addr %08x IRQ %d\n", reg_addr, irq_num);
+                    cpu->attach_device(new device_frame_buffer(reg_addr, width, height));
+                }
+#endif
                 else
                 {
                     printf("|- Create dummy device (%s): Addr %08x - %08x\n", compat, reg_addr, reg_addr + reg_size-1);

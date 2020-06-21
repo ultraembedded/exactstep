@@ -5,17 +5,26 @@
 # Target
 TARGET	   ?= exactstep
 
+HAS_SCREEN ?= False
+
 # Source Files
-SRC_DIR    = core peripherals cpu-rv32 cpu-rv64 cpu-armv6m cli platforms device-tree
+SRC_DIR    = core peripherals cpu-rv32 cpu-rv64 cpu-armv6m cli platforms device-tree display
 
 CFLAGS	    = -O2 -fPIC
 CFLAGS     += -Wno-format
+ifneq ($(HAS_SCREEN),False)
+  CFLAGS   += -DINCLUDE_SCREEN
+endif
 
 INCLUDE_PATH += $(SRC_DIR)
 CFLAGS       += $(patsubst %,-I%,$(INCLUDE_PATH))
 
 LDFLAGS     = 
 LIBS        = -lelf -lbfd -lfdt
+
+ifneq ($(HAS_SCREEN),False)
+  LIBS     += -lSDL
+endif
 
 ###############################################################################
 # Variables
