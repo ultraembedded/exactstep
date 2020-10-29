@@ -2,7 +2,7 @@
 
 Github: https://github.com/ultraembedded/exactstep
 
-ExactStep is a simple multi-target instruction set simulator supporting RISC-V (RV32IMAC, RV64IMAC), ARM-v6m (and others to come soon).  
+ExactStep is a simple multi-target instruction set simulator supporting RISC-V (RV32IMAC, RV64IMAC), MIPS (mips-i), and ARM-v6m (with others to come soon).  
 The emphasis of this project is on ease of extension, allowing its use as a library for cosimulation, peripheral development and System-C bus interfacing, rather than on raw execution performance.
 
 Unlike QEMU and other CPU emulators which make use of dynamic binary translation, ExactStep executes one instruction per call to **cpu::step()**.
@@ -35,7 +35,7 @@ make
 ```
 Usage:
   --elf        | -f FILE       File to load (ELF or BIN)
-  --march      | -m MISA       Machine variant (e.g. RV32IMAC, RV64I, armv6, ...)
+  --march      | -m MISA       Machine variant (e.g. RV32IMAC, RV64I, armv6, mips, ...)
   --platform   | -P PLATFORM   Platform to simulate (basic|virt)
   --dtb        | -D FILE       Device tree blob (binary)
   --trace      | -t 1/0        Enable instruction trace

@@ -12,6 +12,7 @@
 #include "rv32.h"
 #include "rv64.h"
 #include "armv6m.h"
+#include "mips.h"
 
 #include "device_systick.h"
 #include "device_sysuart.h"
@@ -68,6 +69,12 @@ public:
             // Dummy System Control Block - writes have no effect, reads return 0
             cpu->attach_device(new device_dummy(0xE000ED00, 36));
 
+            m_cpu = cpu;
+        }
+        else if (!strncmp(misa, "mips1", 5) || !strncmp(misa, "mips", 4))
+        {
+            printf("Platform: Select %s\n", misa);
+            mips_i * cpu = new mips_i(membase, memsize);
             m_cpu = cpu;
         }
     }

@@ -8,7 +8,7 @@ TARGET	   ?= exactstep
 HAS_SCREEN ?= False
 
 # Source Files
-SRC_DIR    = core peripherals cpu-rv32 cpu-rv64 cpu-armv6m cli platforms device-tree display
+SRC_DIR    = core peripherals cpu-rv32 cpu-rv64 cpu-armv6m cpu-mips-i cli platforms device-tree display
 
 CFLAGS	    = -O2 -fPIC
 CFLAGS     += -Wno-format
