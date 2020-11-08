@@ -30,6 +30,9 @@ public:
 
     uint32_t            get_register(int reg);
     uint32_t            get_pc() { return m_pc_x; }
+    uint32_t            get_next_pc(void) { return m_pc_next; }
+    bool                get_branch(void)  { return m_branch_ds; }
+    bool                get_take_excpn(void)   { return m_take_excpn; }
     uint32_t            get_opcode(void)  { return get_opcode(m_pc_x); }
     int                 get_num_reg(void) { return 32; }
 
@@ -49,12 +52,11 @@ public:
     void                stats_dump(void);
 
     void                enable_mem_errors(bool en) { m_enable_mem_errors = en; }
-    void                set_big_endian(bool be) { m_big_endian = be; }
 
 protected:  
     bool                execute(void);
     int                 load(uint32_t pc, uint32_t address, uint32_t *result, int width, bool signedLoad);
-    int                 store(uint32_t pc, uint32_t address, uint32_t data, uint8_t mask);
+    int                 store(uint32_t pc, uint32_t address, uint32_t data, int width, uint8_t mask);
     void                exception(uint32_t cause, uint32_t pc, uint32_t badaddr = 0);
 
     virtual int         copro0_inst(uint32_t pc, uint32_t opc, uint32_t reg_rs, uint32_t reg_rt, int &wb_reg, uint32_t &result);
@@ -73,8 +75,8 @@ private:
     uint32_t           m_hi;
     uint32_t           m_lo;
     uint32_t           m_isr_vector;
-    bool               m_big_endian;
     bool               m_branch_ds;
+    bool               m_take_excpn;
     bool               m_enable_mem_errors;
     uint32_t           m_cycles;
     uint32_t           m_gpr[32];

@@ -172,8 +172,8 @@ void mips_i::reset(uint32_t start_addr)
     m_hi        = 0;
     m_lo        = 0;
     m_isr_vector= isr_vector;
-    m_big_endian= false;
     m_branch_ds = false;
+    m_take_excpn= false;
     m_cycles    = 0;
 
     m_fault     = false;
@@ -191,7 +191,7 @@ void mips_i::reset(uint32_t start_addr)
 //-----------------------------------------------------------------
 uint32_t mips_i::get_opcode(uint32_t pc)
 {
-    return m_big_endian ? ntohl(read32(pc)) : read32(pc);
+    return read32(pc);
 }
 //-----------------------------------------------------------------
 // load: Perform a load operation
@@ -219,27 +219,12 @@ int mips_i::load(uint32_t pc, uint32_t address, uint32_t *result, int width, boo
             {
                 case 4:
                     mem->read32(physical, *result);
-                    if (m_big_endian)
-                        *result = ntohl(*result);
                     break;
                 case 2:
                 {
-                    uint8_t db = 0;
-
-                    if (m_big_endian)
-                    {
-                        mem->read8(physical + 0, db);
-                        *result |= ((uint32_t)db << 8);
-                        mem->read8(physical + 1, db);
-                        *result |= ((uint32_t)db << 0);
-                    }
-                    else
-                    {
-                        mem->read8(physical + 1, db);
-                        *result |= ((uint32_t)db << 8);
-                        mem->read8(physical + 0, db);
-                        *result |= ((uint32_t)db << 0);
-                    }
+                    uint16_t dh = 0;
+                    mem->read16(physical, dh);
+                    *result |= dh;
 
                     if (signedLoad && ((*result) & (1 << 15)))
                          *result |= 0xFFFF0000;
@@ -276,7 +261,7 @@ int mips_i::load(uint32_t pc, uint32_t address, uint32_t *result, int width, boo
 //-----------------------------------------------------------------
 // store: Perform a store operation
 //-----------------------------------------------------------------
-int mips_i::store(uint32_t pc, uint32_t address, uint32_t data, uint8_t mask)
+int mips_i::store(uint32_t pc, uint32_t address, uint32_t data, int width, uint8_t mask)
 {
     uint32_t physical = address;
 
@@ -294,52 +279,62 @@ int mips_i::store(uint32_t pc, uint32_t address, uint32_t data, uint8_t mask)
     for (memory_base *mem = m_memories; mem != NULL; mem = mem->next)
         if (mem->valid_addr(physical))
         {
-            switch (mask)
+            switch (width)
             {
-                case 0xF:
-                    if (m_big_endian)
-                        mem->write32(physical, ntohl(data));
-                    else
-                        mem->write32(physical, data);
+                case 4:
+                {
+                    switch (mask)
+                    {
+                        case 0xF:
+                            mem->write32(physical, data);
+                            break;
+                        // SWR/SWL patterns
+                        case 0x7:
+                            mem->write8(physical + 0, data >> 0);
+                            mem->write8(physical + 1, data >> 8);
+                            mem->write8(physical + 2, data >> 16);
+                            break;
+                        case 0xe:
+                            mem->write8(physical + 1, data >> 8);
+                            mem->write8(physical + 2, data >> 16);
+                            mem->write8(physical + 3, data >> 24);
+                            break;
+                        case 0xc:
+                            mem->write8(physical + 2, data >> 16);
+                            mem->write8(physical + 3, data >> 24);
+                            break;
+                        case 0x3:
+                            mem->write8(physical + 0, data >> 0);
+                            mem->write8(physical + 1, data >> 8);
+                            break;
+                        case 0x8:
+                            mem->write8(physical + 3, data >> 24);
+                            break;
+                        case 0x4:
+                            mem->write8(physical + 2, data >> 16);
+                            break;
+                        case 0x2:
+                            mem->write8(physical + 1, data >> 8);
+                            break;
+                        case 0x1:
+                            mem->write8(physical + 0, data >> 0);
+                            break;
+                        default:
+                            assert(!"Invalid");
+                            break;
+                    }
+                }
+                break;
+                case 2:
+                    mem->write16(physical, data & 0xFFFF);
                     break;
-                case 0x7:
-                case 0xe:
-                    if (m_big_endian)
-                    {
-                        mem->write8(physical + 0, data >> 16);
-                        mem->write8(physical + 1, data >> 8);
-                        mem->write8(physical + 2, data >> 0);
-                    }
-                    else
-                    {
-                        mem->write8(physical + 0, data >> 0);
-                        mem->write8(physical + 1, data >> 8);
-                        mem->write8(physical + 2, data >> 16);
-                    }
-                    break;
-                case 0xc:
-                case 0x3:
-                    if (m_big_endian)
-                    {
-                        mem->write8(physical + 0, data >> 8);
-                        mem->write8(physical + 1, data >> 0);
-                    }
-                    else
-                    {
-                        mem->write8(physical + 0, data >> 0);
-                        mem->write8(physical + 1, data >> 8);
-                    }
-                    break;
-                case 0x8:
-                case 0x4:
-                case 0x2:
-                case 0x1:
-                    mem->write8(physical + 0, data & 0xFF);
+                case 1:
+                    mem->write8(physical, data & 0xFF);
                     break;
                 default:
                     assert(!"Invalid");
                     break;
-            }
+            }        
             return 1;
         }
 
@@ -546,7 +541,7 @@ bool mips_i::execute(void)
     uint32_t pc_next = m_pc_next + 4;
 
     #define INST_TRACE_R3(inst)       DPRINTF(LOG_INST,("%08x: " inst " $%d, $%d, $%d\n",  m_pc, rd, rs, rt))
-    #define INST_TRACE_I(inst)        DPRINTF(LOG_INST,("%08x: " inst " $%d, $%d, %d\n",   m_pc, rd, rs, imm))
+    #define INST_TRACE_I(inst)        DPRINTF(LOG_INST,("%08x: " inst " $%d, $%d, %d\n",   m_pc, rt, rs, imm))
     #define INST_TRACE_BIR(inst)      DPRINTF(LOG_INST,("%08x: " inst " $%d, $%d, 0x%x\n", m_pc, rs, rt, m_pc_next + (imm_int32 << 2)))
     #define INST_TRACE_BIZ(inst)      DPRINTF(LOG_INST,("%08x: " inst " $%d, 0, 0x%x\n",   m_pc, rs, m_pc_next + (imm_int32 << 2)))
     #define INST_TRACE_MULDIV(inst)   DPRINTF(LOG_INST,("%08x: " inst " $%d, $%d\n",       m_pc, rs, rt))
@@ -960,7 +955,7 @@ bool mips_i::execute(void)
         {
             INST_TRACE_STORE("sb");
             uint32_t addr = reg_rs + (signed short)imm;
-            if (!store(m_pc, addr, reg_rt, 1 << (addr & 3)))
+            if (!store(m_pc, addr, reg_rt, 1, 1 << (addr & 3)))
                 take_excpn = true;
         }
         break;
@@ -969,14 +964,14 @@ bool mips_i::execute(void)
         {
             INST_TRACE_STORE("sh");
             uint32_t addr = reg_rs + (signed short)imm;
-            if (!store(m_pc, addr, reg_rt, 0x3 << (addr & 2)))
+            if (!store(m_pc, addr, reg_rt, 2, 0x3 << (addr & 2)))
                 take_excpn = true;
         }
         break;
 
         case INSTR_I_SW:
             INST_TRACE_STORE("sw");
-            if (!store(m_pc, reg_rs + (signed short)imm, reg_rt, 0xF))
+            if (!store(m_pc, reg_rs + (signed short)imm, reg_rt, 4, 0xF))
                 take_excpn = true;
             break;
 
@@ -999,7 +994,7 @@ bool mips_i::execute(void)
                 case 2: mask = 0x7; break;
                 case 3: mask = 0xF; break;
             }
-            if (!store(m_pc, addr & ~3, reg_rt, mask))
+            if (!store(m_pc, addr & ~3, reg_rt, 4, mask))
                 take_excpn = true;
         }
         break;
@@ -1023,7 +1018,7 @@ bool mips_i::execute(void)
                 case 2: mask = 0xc; break;
                 case 3: mask = 0x8; break;
             }
-            if (!store(m_pc, addr & ~3, reg_rt, mask))
+            if (!store(m_pc, addr & ~3, reg_rt, 4, mask))
                 take_excpn = true;
         }
         break;
@@ -1063,7 +1058,7 @@ bool mips_i::execute(void)
             m_stats[STATS_COPRO]++;
             if (!copro_inst(inst-INSTR_I_SWC0, m_pc, opcode, 0, 0, wb_reg, result))
                 take_excpn = true;
-            else if (!store(m_pc, reg_rs + (signed short)imm, result, 0xF))
+            else if (!store(m_pc, reg_rs + (signed short)imm, result, 4, 0xF))
                 take_excpn = true;
             wb_reg = 0;
             break;
@@ -1073,6 +1068,41 @@ bool mips_i::execute(void)
             exception(EXC_RI, m_pc);
             take_excpn = true;
             break;
+    }
+
+    m_take_excpn = false;
+
+    // If not handling an exception
+    bool take_irq = false;
+    if (!take_excpn)
+    {
+        // Interrupt pending and enabled (and not already taking a trap)
+        if (SR_BF_GET(m_status, IEC) && CAUSE_BF_GET(m_cause, IP0, 0xFF) != 0)
+        {
+            uint32_t mask    = SR_BF_GETM(m_status,  IM0, 0xFF);
+            uint32_t pending = CAUSE_BF_GET(m_cause, IP0, 0xFF);
+
+            // Interrupt pending and enabled
+            pending &= mask;
+            if (pending)
+            {
+                // Current instruction was executed, return to next
+                exception(EXC_INT, m_pc);
+
+                // Jump to exception handler
+                pc      = m_isr_vector;
+                pc_next = pc + 4;
+
+                m_stats[STATS_EXCEPTIONS]++;
+                m_stats[STATS_BRANCHES]++;
+                m_take_excpn = true;
+
+                take_irq    = true;
+
+                // Squash writeback
+                wb_reg  = 0;
+            }
+        }
     }
 
     // Trap (faults, syscall, etc)
@@ -1087,8 +1117,10 @@ bool mips_i::execute(void)
 
         m_stats[STATS_EXCEPTIONS]++;
         m_stats[STATS_BRANCHES]++;
-        m_branch_ds = true;
+        m_take_excpn = true;
     }
+    else if (take_irq)
+        ;
     // Handle branches (b****)
     else if (take_branch)
     {
@@ -1104,36 +1136,8 @@ bool mips_i::execute(void)
         m_stats[STATS_BRANCHES]++;
         m_branch_ds = true;
     }
-    // If not branching, handle interrupts / exceptions
     else
-    {
-        // Interrupt pending and enabled (and not already taking a trap)
-        if (SR_BF_GET(m_status, IEC) && CAUSE_BF_GET(m_cause, IP0, 0xFF) != 0)
-        {
-            uint32_t mask    = SR_BF_GETM(m_status,  IM0, 0xFF);
-            uint32_t pending = CAUSE_BF_GET(m_cause, IP0, 0xFF);
-
-            // Interrupt pending and enabled
-            pending &= mask;
-            if (pending)
-            {
-                // Current instruction was executed, return to next
-                exception(EXC_INT, pc);
-
-                // Jump to exception handler
-                pc      = m_isr_vector;
-                pc_next = pc + 4;
-
-                m_stats[STATS_EXCEPTIONS]++;
-                m_stats[STATS_BRANCHES]++;
-                m_branch_ds = true;
-            }
-            else
-                m_branch_ds = false;
-        }
-        else
-            m_branch_ds = false;
-    }
+        m_branch_ds = false;
 
     // Update registers with variable values
     m_pc_x      = m_pc;
@@ -1144,7 +1148,7 @@ bool mips_i::execute(void)
     if (wb_reg != 0)
         m_gpr[wb_reg] = result;
 
-    return true;
+    return !take_irq;
 }
 //-----------------------------------------------------------------
 // step: Step through one instruction
@@ -1154,7 +1158,9 @@ void mips_i::step(void)
     m_stats[STATS_INSTRUCTIONS]++;
 
     // Execute instruction at current PC
-    execute();
+    int max_steps = 2;
+    while (max_steps-- && !execute())
+        ;
 
     // Increment timer counter
     m_cycles++;
