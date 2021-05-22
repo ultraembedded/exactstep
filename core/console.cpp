@@ -74,5 +74,8 @@ int console::putchar(int ch)
 //-----------------------------------------------------------------
 int console::getchar(void)
 {
-    return fgetc(stdin);
+    char ch;
+    if (read(STDIN_FILENO,&ch,1) == 1) 
+        return ch;
+    return -1;
 }
