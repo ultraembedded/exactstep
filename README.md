@@ -1,5 +1,7 @@
 # ExactStep - Instruction Accurate Instruction Set Simulator
 
+[![Build](https://github.com/ultraembedded/exactstep/workflows/Build/badge.svg)][GitHub Actions]
+
 Github: https://github.com/ultraembedded/exactstep
 
 ExactStep is a simple multi-target instruction set simulator supporting RISC-V (RV32IMAC, RV64IMAC), MIPS (mips-i), and ARM-v6m (with others to come soon).  
@@ -21,7 +23,7 @@ This project uses make and ELF + BFD libraries.
 If you are using a Debian based Linux distro (Ubuntu / Linux Mint), you can install the required dependencies using;
 
 ```
-sudo apt-get install libelf-dev binutils-dev
+sudo apt-get install libelf-dev binutils-dev libfdt-dev
 ```
 
 To build the default command line simulator (CLI);
