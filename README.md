@@ -1,6 +1,6 @@
 # ExactStep - Instruction Accurate Instruction Set Simulator
 
-[![Build](https://github.com/ultraembedded/exactstep/workflows/Build/badge.svg)][GitHub Actions]
+![Build](https://github.com/ultraembedded/exactstep/workflows/Build/badge.svg)
 
 Github: https://github.com/ultraembedded/exactstep
 
