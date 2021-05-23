@@ -44,7 +44,7 @@
 #define IRQ_MER           0x1c
     #define IRQ_MER_ME                           0
     #define IRQ_MER_ME_SHIFT                     0
-    #define IRQ_MER_ME_MASK                      0x1
+    #define IRQ_MER_ME_MASK                      0x3
 
 //-----------------------------------------------------------------
 // device_irq_ctrl: Basic IRQ controller somewhat compatible with Xilinx IP

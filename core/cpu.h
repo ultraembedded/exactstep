@@ -106,6 +106,9 @@ public:
     // Error message
     bool              error(bool is_fatal, const char *fmt, ...);
 
+    // Find device by name and index
+    device *          find_device(std::string name, int idx);
+
 protected:
     // Memory
     memory_base        *m_memories;

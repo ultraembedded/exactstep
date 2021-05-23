@@ -31,6 +31,7 @@ extern "C"
 #include "device_frame_buffer.h"
 #endif
 #include "device_dummy.h"
+#include "virtio.h"
 
 //-----------------------------------------------------------------
 // Constructor
@@ -204,6 +205,11 @@ bool device_tree::load(cpu *cpu)
                     cpu->attach_device(new device_frame_buffer(reg_addr, width, height));
                 }
 #endif
+                else if (!strcmp(compat, "virtio,mmio"))
+                {
+                    printf("|- Create VirtIO: Addr %08x IRQ %d\n", reg_addr, irq_num);
+                    cpu->attach_device(new virtio(cpu, reg_addr, irq_ctrl, irq_num));
+                }
                 else
                 {
                     printf("|- Create dummy device (%s): Addr %08x - %08x\n", compat, reg_addr, reg_addr + reg_size-1);

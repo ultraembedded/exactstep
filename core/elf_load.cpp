@@ -20,11 +20,12 @@
 //--------------------------------------------------------------------
 // Constructor
 //--------------------------------------------------------------------
-elf_load::elf_load(const char *filename, mem_api *target)
+elf_load::elf_load(const char *filename, mem_api *target, bool load_to_paddr /*= false*/)
 {
-    m_filename    = std::string(filename);
-    m_target      = target;
-    m_entry_point = 0;
+    m_filename      = std::string(filename);
+    m_target        = target;
+    m_entry_point   = 0;
+    m_load_to_paddr = load_to_paddr;
 }
 //--------------------------------------------------------------------
 // load: Load ELF to target
@@ -37,6 +38,7 @@ bool elf_load::load(void)
     Elf_Scn *scn;
     Elf_Data *data;
     size_t shstrndx;
+    int num_phdrs = 0;
 
     if (elf_version ( EV_CURRENT ) == EV_NONE)
         return false;
@@ -60,6 +62,7 @@ bool elf_load::load(void)
         GElf_Ehdr _ehdr;
         GElf_Ehdr *ehdr = gelf_getehdr(e, &_ehdr);
         m_entry_point = ehdr ? (uint32_t)ehdr->e_entry : 0;
+        num_phdrs = ehdr ? ehdr->e_phnum : 0;
     }
 
     int section_idx = 0;
@@ -75,10 +78,23 @@ bool elf_load::load(void)
             if ((shdr64->sh_flags & SHF_ALLOC) && (shdr64->sh_size > 0))
             {
                 data = elf_getdata(scn, NULL);
+                uint64_t base_addr = shdr64->sh_addr;
 
                 printf("Memory: 0x%lx - 0x%lx (Size=%ldKB) [%s]\n", shdr64->sh_addr, shdr64->sh_addr + shdr64->sh_size - 1, shdr64->sh_size / 1024, elf_strptr(e, shstrndx, shdr64->sh_name));
 
-                if (!m_target->create_memory(shdr64->sh_addr, shdr64->sh_size))
+                // Load to physical address instead of the virtual target?
+                if (m_load_to_paddr)
+                {
+                    Elf64_Phdr *ptbl = elf64_getphdr(e);
+                    for (int i=0;i<num_phdrs;i++,ptbl++)
+                        if (base_addr == ptbl->p_vaddr)
+                        {
+                            base_addr = ptbl->p_paddr;
+                            break;
+                        }
+                }
+
+                if (!m_target->create_memory(base_addr, shdr64->sh_size))
                 {
                     fprintf(stderr, "ERROR: Cannot allocate memory region\n");
                     close (fd);
@@ -90,7 +106,7 @@ bool elf_load::load(void)
                     int i;
                     for (i=0;i<shdr64->sh_size;i++)
                     {
-                        uint32_t load_addr = shdr64->sh_addr + i;
+                        uint32_t load_addr = base_addr + i;
                         if (m_target->valid_addr(load_addr))
                             m_target->write(load_addr, ((uint8_t*)data->d_buf)[i]);
                         else
@@ -107,10 +123,23 @@ bool elf_load::load(void)
         else if ((shdr->sh_flags & SHF_ALLOC) && (shdr->sh_size > 0))
         {
             data = elf_getdata(scn, NULL);
+            uint32_t base_addr = shdr->sh_addr;
 
             printf("Memory: 0x%x - 0x%x (Size=%dKB) [%s]\n", shdr->sh_addr, shdr->sh_addr + shdr->sh_size - 1, shdr->sh_size / 1024, elf_strptr(e, shstrndx, shdr->sh_name));
 
-            if (!m_target->create_memory(shdr->sh_addr, shdr->sh_size))
+            // Load to physical address instead of the virtual target?
+            if (m_load_to_paddr)
+            {
+                Elf32_Phdr *ptbl = elf32_getphdr(e);
+                for (int i=0;i<num_phdrs;i++,ptbl++)
+                    if (base_addr == ptbl->p_vaddr)
+                    {
+                        base_addr = ptbl->p_paddr;
+                        break;
+                    }
+            }
+
+            if (!m_target->create_memory(base_addr, shdr->sh_size))
             {
                 fprintf(stderr, "ERROR: Cannot allocate memory region\n");
                 close (fd);
@@ -122,7 +151,7 @@ bool elf_load::load(void)
                 int i;
                 for (i=0;i<shdr->sh_size;i++)
                 {
-                    uint32_t load_addr = shdr->sh_addr + i;
+                    uint32_t load_addr = base_addr + i;
                     if (m_target->valid_addr(load_addr))
                         m_target->write(load_addr, ((uint8_t*)data->d_buf)[i]);
                     else

@@ -21,12 +21,15 @@
 #include "platform_virt.h"
 #include "platform_device_tree.h"
 
+#include "virtio_block.h"
+#include "virtio_net.h"
+
 static volatile bool m_user_abort = false;
 
 //-----------------------------------------------------------------
 // Command line options
 //-----------------------------------------------------------------
-#define GETOPTS_ARGS "m:t:v:f:c:r:b:s:e:D:P:p:j:k:h"
+#define GETOPTS_ARGS "m:t:v:f:c:r:b:s:e:ED:P:p:j:k:V:T:h"
 
 static struct option long_options[] =
 {
@@ -46,6 +49,9 @@ static struct option long_options[] =
     {"dump-end",   required_argument, 0, 'k'},
     {"dump-reg-f", required_argument, 0, 'R'},
     {"dump-reg-s", required_argument, 0, 'S'},
+    {"elf-phys",   no_argument,       0, 'E'},
+    {"vda",        required_argument, 0, 'V'},
+    {"tap",        required_argument, 0, 'T'},
     {"help",       no_argument,       0, 'h'},
     {0, 0, 0, 0}
 };
@@ -62,6 +68,7 @@ static void help_options(void)
     fprintf (stderr,"  --cycles     | -c NUM        Max instructions to execute\n");
     fprintf (stderr,"  --stop-pc    | -r PC         Stop at PC address\n");
     fprintf (stderr,"  --trace-pc   | -e PC         Trace from PC address\n");
+    fprintf (stderr,"  --elf-phys   | -E            Load to ELF section to physical addresses (suitable for bootloaders)\n");
     fprintf (stderr,"  --mem-base   | -b VAL        Memory base address (for binary loads)\n");
     fprintf (stderr,"  --mem-size   | -s VAL        Memory size (for binary loads)\n");
     fprintf (stderr,"  --dump-file  | -p FILE       File to dump memory contents to after completion\n");
@@ -69,6 +76,8 @@ static void help_options(void)
     fprintf (stderr,"  --dump-end   | -k SYM/A      Symbol name for memory dump end (or 0xADDR)\n");
     fprintf (stderr,"  --dump-reg-f | -R FILE       File to dump register file contents to after completion\n");
     fprintf (stderr,"  --dump-reg-s | -S NUM        Number of register file entries to dump\n");
+    fprintf (stderr,"  --vda        | -V FILE       Disk image for VirtIO block device (/dev/vda)\n");
+    fprintf (stderr,"  --tap        | -T TAP        Tap device for VirtIO net device\n");
     exit(-1);
 }
 //-----------------------------------------------------------------
@@ -244,6 +253,9 @@ int main(int argc, char *argv[])
     uint32_t       dump_end       = 0;
     char *         dump_reg_file  = NULL;
     uint32_t       dump_reg_num   = 32;
+    bool           load_phys      = false;
+    const char *   vda_file       = NULL;
+    const char *   tap_device     = NULL;
     int c;
 
     int option_index = 0;
@@ -310,6 +322,15 @@ int main(int argc, char *argv[])
             case 'S':
                 dump_reg_num = strtoul(optarg, NULL, 0);
                 break;
+            case 'E':
+                load_phys = true;
+                break;
+            case 'V':
+                vda_file = optarg;
+                break;
+            case 'T':
+                tap_device = optarg;
+                break;
             case '?':
             default:
                 help = 1;   
@@ -357,6 +378,39 @@ int main(int argc, char *argv[])
         sim->create_memory(mem_base, mem_size);
     }
 
+    // User specified virtio block device file
+    int vda_idx = 0;
+    if (vda_file)
+    {
+        virtio * vda_dev = (virtio *)sim->find_device("virtio", vda_idx++);
+        if (vda_dev)
+        {
+            virtio_block *vda_blk_dev = new virtio_block(vda_dev);
+            if (!vda_blk_dev->open(vda_file))
+            {
+                fprintf (stderr,"Error: Could not open %s\n", vda_file);
+                return -1;
+            }
+        }
+    }
+
+    // User specified tap device for virtio networking
+#ifdef INCLUDE_NET_DEVICE
+    if (tap_device)
+    {
+        virtio * vda_dev = (virtio *)sim->find_device("virtio", vda_idx++);
+        if (vda_dev)
+        {
+            virtio_net *vda_net_dev = new virtio_net(vda_dev);
+            if (!vda_net_dev->open(tap_device, NULL))
+            {
+                fprintf (stderr,"Error: Could not open %s\n", tap_device);
+                return -1;
+            }
+        }
+    }
+#endif
+
     uint32_t start_addr = 0;
 
     const char *ext   = filename ? strrchr(filename, '.') : NULL;
@@ -376,7 +430,7 @@ int main(int argc, char *argv[])
     // ELF
     else
     {
-        elf_load elf(filename, sim);
+        elf_load elf(filename, sim, load_phys);
         if (!elf.load())
         {
             fprintf (stderr,"Error: Could not open %s\n", filename);

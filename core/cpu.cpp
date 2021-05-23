@@ -24,7 +24,7 @@ cpu::cpu()
     m_stopped            = false;
     m_fault              = false;
     m_break              = false;
-    m_trace              = 0;    
+    m_trace              = 0;
 }
 //-----------------------------------------------------------------
 // error: Handle an error
@@ -284,4 +284,22 @@ void cpu::step(void)
         if (irq_num != -1)
             set_interrupt(irq_num);
     }
+}
+//-----------------------------------------------------------------
+// find_device: Find device by name and index
+//-----------------------------------------------------------------
+device * cpu::find_device(std::string name, int idx)
+{
+    int count = 0;
+    for (device *d = m_devices; d; d = d->device_next)
+    {
+        if (d->get_name() == name)
+        {
+            if (idx == count)
+                return d;
+            count++;
+        }
+    }
+
+    return NULL;
 }
