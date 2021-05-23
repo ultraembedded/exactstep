@@ -43,11 +43,16 @@ Usage:
   --cycles     | -c NUM        Max instructions to execute
   --stop-pc    | -r PC         Stop at PC address
   --trace-pc   | -e PC         Trace from PC address
+  --elf-phys   | -E            Load to ELF section to physical addresses (suitable for bootloaders)
   --mem-base   | -b VAL        Memory base address (for binary loads)
   --mem-size   | -s VAL        Memory size (for binary loads)
   --dump-file  | -p FILE       File to dump memory contents to after completion
   --dump-start | -j SYM/A      Symbol name for memory dump start (or 0xADDR)
   --dump-end   | -k SYM/A      Symbol name for memory dump end (or 0xADDR)
+  --dump-reg-f | -R FILE       File to dump register file contents to after completion
+  --dump-reg-s | -S NUM        Number of register file entries to dump
+  --vda        | -V FILE       Disk image for VirtIO block device (/dev/vda)
+  --tap        | -T TAP        Tap device for VirtIO net device
 ```
 
 The default architecture is a RV32IMAC CPU model. To run a basic ELF;
