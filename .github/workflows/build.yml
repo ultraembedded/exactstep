@@ -8,5 +8,5 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
-      - run: sudo apt-get install libelf-dev binutils-dev
+      - run: sudo apt-get install libelf-dev binutils-dev libfdt-dev
       - run: make
