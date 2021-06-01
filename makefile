@@ -6,13 +6,16 @@
 TARGET	   ?= exactstep
 
 HAS_SCREEN ?= False
+HAS_NETWORK ?= False
 
 # Source Files
 SRC_DIR    = core peripherals cpu-rv32 cpu-rv64 cpu-armv6m cpu-mips-i cli platforms device-tree display net virtio
 
 CFLAGS	    = -O2 -fPIC
 CFLAGS     += -Wno-format
-CFLAGS     += -DINCLUDE_NET_DEVICE
+ifneq ($(HAS_NETWORK),False)
+  CFLAGS   += -DINCLUDE_NET_DEVICE
+endif
 ifneq ($(HAS_SCREEN),False)
   CFLAGS   += -DINCLUDE_SCREEN
 endif

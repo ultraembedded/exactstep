@@ -19,6 +19,7 @@
 //------------------------------------------------------------
 net_tap::net_tap(const char *if_name)
 {
+    m_fd = -1;
     init(if_name);
 }
 //------------------------------------------------------------
@@ -39,8 +40,9 @@ bool net_tap::init(const char *if_name)
 
     if ((ioctl(m_fd, TUNSETIFF, (void *)&ifr)) < 0)
     {
-        perror("ioctl(TUNSETIFF)");
+        fprintf(stderr, "ERROR: Cannot open TAP device '%s' (permissions?)\n", if_name);
         close(m_fd);
+        m_fd = -1;
         return false;
     }
 
@@ -51,6 +53,9 @@ bool net_tap::init(const char *if_name)
 //------------------------------------------------------------
 int net_tap::receive(uint8_t *buffer, int max_len)
 {
+    if (m_fd < 0)
+        return 0;
+
     int l = read(m_fd, (char*)buffer, max_len);
     if (l < 0 && errno == EAGAIN)
         return 0;
@@ -69,6 +74,9 @@ int net_tap::receive(uint8_t *buffer, int max_len)
 //------------------------------------------------------------
 int net_tap::send(uint8_t *buffer, int length)
 {
+    if (m_fd < 0)
+        return 0;
+
     return write(m_fd, buffer, length) == length; 
 }
 #endif
