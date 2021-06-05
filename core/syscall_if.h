@@ -5,26 +5,17 @@
 //                     Copyright 2014-2019
 //                    License: BSD 3-Clause
 //-----------------------------------------------------------------
-#ifndef __BIN_LOAD_H__
-#define __BIN_LOAD_H__
-
-#include "mem_api.h"
-#include <string>
+#ifndef __SYSCALL_IF_H__
+#define __SYSCALL_IF_H__
 
 //--------------------------------------------------------------------
-// Binary loader
+// Abstract interface for syscall_if
 //--------------------------------------------------------------------
-class bin_load
+class cpu;
+class syscall_if
 {
-public:
-    bin_load(const char *filename, mem_api *target);
-
-    bool load(uint32_t mem_base, uint32_t mem_size);
-    bool load(uint32_t mem_base);
-
-protected:
-    std::string m_filename;
-    mem_api *   m_target;
+public:  
+    virtual bool syscall_handler(cpu *instance) = 0;
 };
 
 #endif

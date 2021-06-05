@@ -25,6 +25,7 @@ cpu::cpu()
     m_fault              = false;
     m_break              = false;
     m_trace              = 0;
+    m_syscall_if         = NULL;
 }
 //-----------------------------------------------------------------
 // error: Handle an error
@@ -280,9 +281,11 @@ void cpu::step(void)
     for (device *dev = m_devices; dev != NULL; dev = dev->device_next)
     {
         dev->clock();
-        int irq_num = dev->get_irq();
-        if (irq_num != -1)
-            set_interrupt(irq_num);
+
+        if (dev->event_irq_raised())
+            set_interrupt(dev->get_irq_num());
+        else if (dev->event_irq_dropped())
+            clr_interrupt(dev->get_irq_num());
     }
 }
 //-----------------------------------------------------------------

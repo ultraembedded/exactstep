@@ -2,14 +2,14 @@
 ## Simulator Makefile
 ###############################################################################
 
-# Target
-TARGET	   ?= exactstep
+# TARGETS
+TARGETS	   ?= exactstep exactstep-riscv-linux
 
 HAS_SCREEN ?= False
 HAS_NETWORK ?= False
 
 # Source Files
-SRC_DIR    = core peripherals cpu-rv32 cpu-rv64 cpu-armv6m cpu-mips-i cli platforms device-tree display net virtio
+SRC_DIR    = core peripherals cpu-rv32 cpu-rv64 cpu-armv6m cpu-mips-i cli platforms device-tree display net virtio sbi
 
 CFLAGS	    = -O2 -fPIC
 CFLAGS     += -Wno-format
@@ -42,8 +42,10 @@ OBJ_DIR      ?= obj/
 src2obj       = $(OBJ_DIR)$(patsubst %$(suffix $(1)),%.o,$(notdir $(1)))
 
 SRC          ?= $(foreach src,$(SRC_DIR),$(wildcard $(src)/*.cpp))
-OBJ          ?= $(foreach src,$(SRC),$(call src2obj,$(src)))
-LIB_OBJ      ?= $(foreach src,$(filter-out main.cpp,$(SRC)),$(call src2obj,$(src)))
+SRC_FILT     := $(filter-out cli/main.cpp,$(SRC))
+SRC_FILT     := $(filter-out cli/main_riscv_linux.cpp,$(SRC_FILT))
+
+OBJ          ?= $(foreach src,$(SRC_FILT),$(call src2obj,$(src)))
 
 ###############################################################################
 # Rules: Compilation macro
@@ -57,17 +59,21 @@ endef
 ###############################################################################
 # Rules
 ###############################################################################
-all: $(TARGET) 
+all: $(TARGETS) 
 	
 $(OBJ_DIR):
 	@mkdir -p $@
 
 $(foreach src,$(SRC),$(eval $(call template_cpp,$(src))))	
 
-$(TARGET): $(OBJ) makefile
+exactstep: $(OBJ) $(OBJ_DIR)main.o makefile
 	@echo "# Linking $(notdir $@)"
-	@g++ $(LDFLAGS) $(OBJ) $(LIBS) -o $@
+	@g++ $(LDFLAGS) $(OBJ_DIR)main.o $(OBJ) $(LIBS) -o $@
+
+exactstep-riscv-linux: $(OBJ) $(OBJ_DIR)main_riscv_linux.o makefile
+	@echo "# Linking $(notdir $@)"
+	@g++ $(LDFLAGS) $(OBJ_DIR)main_riscv_linux.o $(OBJ) $(LIBS) -o $@
 
 clean:
-	-rm -rf $(OBJ_DIR) $(TARGET)
+	-rm -rf $(OBJ_DIR) $(TARGETS)
 

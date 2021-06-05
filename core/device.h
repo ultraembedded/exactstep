@@ -22,15 +22,16 @@ public:
         m_irq_ctrl   = irq_ctrl;
         m_irq_number = irq;
         m_irq_raised = false;
+        m_irq_dropped= false;
         device_next  = NULL;
     }
 
     virtual void set_irq(int irq) { }
-    virtual int  get_irq(void)
+    virtual void clr_irq(int irq) { }
+
+    virtual int  get_irq_num(void)
     {
-        bool irq = m_irq_raised;
-        m_irq_raised = false;
-        return irq ? m_irq_number : -1; 
+        return m_irq_number; 
     } 
 
     virtual void raise_interrupt(void)
@@ -39,6 +40,28 @@ public:
             m_irq_ctrl->set_irq(m_irq_number);
         else
             m_irq_raised = true;
+    }
+
+    virtual void drop_interrupt(void)
+    {
+        if (m_irq_ctrl)
+            m_irq_ctrl->clr_irq(m_irq_number);
+        else
+            m_irq_dropped = true;
+    }
+
+    virtual bool event_irq_raised(void)
+    {
+        bool val = m_irq_raised;
+        m_irq_raised = false;
+        return val;
+    }
+
+    virtual bool event_irq_dropped(void)
+    {
+        bool val = m_irq_dropped;
+        m_irq_dropped = false;
+        return val;
     }
 
     virtual int  min_access_size(void) { return 4; }
@@ -74,6 +97,7 @@ protected:
     int              m_irq_number;
     device         * m_irq_ctrl;
     bool             m_irq_raised;
+    bool             m_irq_dropped;
 };
 
 #endif

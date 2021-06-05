@@ -28,6 +28,10 @@ public:
 
     bool         load(cpu *cpu);
 
+    // This API only makes sense for systems with a single linear memory
+    uint32_t     get_mem_base(void) { return m_mem_base; }
+    uint32_t     get_mem_size(void) { return m_mem_size; }
+
 protected:
     bool         open_fdt(void);
     int          process_node(int offset);
@@ -36,6 +40,8 @@ protected:
     std::string  m_filename;
     uint8_t *    m_fdt;
     console_io  *m_console;
+    uint32_t     m_mem_base;
+    uint32_t     m_mem_size;
 };
 
 #endif

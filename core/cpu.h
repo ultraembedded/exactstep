@@ -14,6 +14,7 @@
 #include "device.h"
 #include "mem_api.h"
 #include "console_io.h"
+#include "syscall_if.h"
 
 //--------------------------------------------------------------------
 // CPU model base class
@@ -56,6 +57,12 @@ public:
     virtual bool      set_breakpoint(uint32_t pc);
     virtual bool      clr_breakpoint(uint32_t pc);
     virtual bool      check_breakpoint(uint32_t pc);
+
+    // Syscall hosting (semi-hosting)
+    virtual bool      syscall_handler(void)
+                      { return m_syscall_if ? m_syscall_if->syscall_handler(this) : false; }
+    virtual void      set_syscall_handler(syscall_if *sys_if) 
+                      { m_syscall_if = sys_if; }
 
     // State after execution
     virtual uint32_t  get_opcode(void) = 0;
@@ -126,6 +133,9 @@ protected:
 
     // Console
     console_io         *m_console;
+
+    // System call hosting
+    syscall_if         *m_syscall_if;
 };
 
 #endif

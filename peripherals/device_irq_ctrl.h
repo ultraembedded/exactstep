@@ -59,23 +59,30 @@ public:
     
     void reset(void)
     {
-        m_isr = 0;
-        m_ier = 0;
-        m_mer = 0;        
+        m_isr      = 0;
+        m_ier      = 0;
+        m_mer      = 0;
+        m_irq_last = false;
+    }
+
+    void eval_irq(void)
+    {
+        bool irq = ((m_isr & m_ier) != 0 && m_mer);
+
+        if (irq && !m_irq_last)
+            raise_interrupt();
+        else if (!irq && m_irq_last)
+            drop_interrupt();
+
+        m_irq_last = irq;
     }
 
     void set_irq(int irq)
     {
         if (irq != -1)
             m_isr |= (1 << irq);
-    }
 
-    int get_irq(void)
-    {
-        if ((m_isr & m_ier) != 0 && m_mer)
-            return m_irq_number;
-        else
-            return -1;
+        eval_irq();
     }
 
     bool write32(uint32_t address, uint32_t data)
@@ -106,6 +113,8 @@ public:
                 return false;
             break;
         }
+        eval_irq();
+
         return true;
     }
     bool read32(uint32_t address, uint32_t &data)
@@ -153,6 +162,8 @@ private:
     uint32_t m_isr;
     uint32_t m_ier;
     uint32_t m_mer;
+
+    bool     m_irq_last;
 };
 
 #endif

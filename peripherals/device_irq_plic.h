@@ -72,9 +72,11 @@ public:
             for (int i=0;i<32;i++)
                 if (masked[x] & (1 << i))
                 {
+                    raise_interrupt();
                     m_irq = true;
                     return (x*32) + i;
                 }
+
         return 0; // Interrupt 0 not valid
     }
 
@@ -94,14 +96,6 @@ public:
         eval_irq();
     }
 
-    int get_irq(void)
-    {
-        if (m_irq)
-            return m_irq_number;
-        else
-            return -1;
-    }
-
     bool write32(uint32_t address, uint32_t data)
     {
         address -= m_base;
@@ -112,6 +106,21 @@ public:
             m_enable[(address-PLIC_REG_ENABLE0)/4] = data;
         else if (address == PLIC_REG_PRIO_THRESH)
             m_prio_thresh = data;
+        // Complete interrupt
+        else if (address == PLIC_REG_CLAIM)
+        {
+            // Interrupt claimed - clear
+            if (data > 0)
+            {
+                int grp = data / 32;
+                int bit = data % 32;
+                m_pending[grp] &= ~(1 << bit);
+            }
+
+            // Drop interrupt if nothing new pending
+            if (eval_irq() == 0)
+                drop_interrupt();
+        }
         else
             fprintf(stderr, "PLIC: Bad write @ %08x\n", address);
 
@@ -147,16 +156,8 @@ public:
         else if (address == PLIC_REG_CLAIM)
         {
             int irq = eval_irq();
-
-            // Interrupt claimed - clear
-            if (irq >= 0)
-            {
-                int grp = irq / 32;
-                int bit = irq % 32;
-                m_pending[grp] &= ~(1 << bit);
-            }
-
             data = (uint32_t)irq;
+            return true;
         }
 
         fprintf(stderr, "PLIC: Bad read @ %08x\n", address);

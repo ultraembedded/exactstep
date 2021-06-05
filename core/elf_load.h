@@ -17,7 +17,7 @@
 class elf_load
 {
 public:
-    elf_load(const char *filename, mem_api *target, bool load_to_paddr = false);
+    elf_load(const char *filename, mem_api *target, bool load_to_paddr = false, int64_t load_offset = 0);
 
     bool     load(void);
     uint32_t get_entry_point(void) { return m_entry_point; }
@@ -28,6 +28,7 @@ protected:
     mem_api *   m_target;
     uint32_t    m_entry_point;
     bool        m_load_to_paddr;
+    int64_t     m_load_offset;
 };
 
 #endif

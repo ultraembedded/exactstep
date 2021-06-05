@@ -54,6 +54,11 @@ public:
     void                enable_rvc(bool en) { m_enable_rvc = en; }
     void                enable_rva(bool en) { m_enable_rva = en; }
 
+    // SBI hosting support
+    bool                in_super_mode(void);
+    void                set_timer(uint32_t value);
+    void                sbi_boot(uint32_t boot_addr, uint32_t dtb_addr);
+
 protected:  
     bool                execute(void);
     int                 load(uint32_t pc, uint32_t address, uint32_t *result, int width, bool signedLoad);
@@ -112,6 +117,7 @@ private:
     bool                m_enable_rvc;
     bool                m_enable_rva;
     bool                m_enable_mtimecmp;
+    bool                m_enable_sbi;
 
     // Stats
     enum eStats

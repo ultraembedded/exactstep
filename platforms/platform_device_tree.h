@@ -21,6 +21,8 @@ public:
         m_filename = std::string(filename);
         m_console  = con_io;
         m_this_cpu = NULL;
+        m_mem_base = 0;
+        m_mem_size = 0;
     }
 
     virtual cpu* get_cpu(void)
@@ -34,15 +36,23 @@ public:
             device_tree fdt(m_filename.c_str(), m_console);
             if (!fdt.load(m_this_cpu))
                 fprintf(stderr, "ERROR: Failed to open device tree\n");
+
+            m_mem_base = fdt.get_mem_base();
+            m_mem_size = fdt.get_mem_size();
         }
 
         return m_this_cpu;
     }
 
-    cpu * m_this_cpu;
+    // This API only makes sense for systems with a single linear memory
+    uint32_t     get_mem_base(void) { return m_mem_base; }
+    uint32_t     get_mem_size(void) { return m_mem_size; }
 
-    std::string m_filename;
-    console_io *m_console;
+    cpu *        m_this_cpu;
+    std::string  m_filename;
+    console_io * m_console;
+    uint32_t     m_mem_base;
+    uint32_t     m_mem_size;
 };
 
 #endif

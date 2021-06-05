@@ -31,7 +31,7 @@ bool bin_load::load(uint32_t mem_base, uint32_t mem_size)
     if (f)
     {
         long size;
-        char *buf;
+        uint8_t *buf;
         int error = 1;
 
         // Get size
@@ -39,12 +39,11 @@ bool bin_load::load(uint32_t mem_base, uint32_t mem_size)
         size = ftell(f);
         rewind(f);
 
-        buf = (char*)malloc(size+1);
+        buf = (uint8_t*)malloc(size);
         if (buf)
         {
             // Read file data in
             int len = fread(buf, 1, size, f);
-            buf[len] = 0;
 
             if (!m_target->create_memory(mem_base, mem_size))
                 fprintf (stderr,"Error: Could not allocate memory\n");
@@ -61,6 +60,55 @@ bool bin_load::load(uint32_t mem_base, uint32_t mem_size)
                         error = 1;
                         break;
                     }
+                }
+            }
+
+            free(buf);
+            fclose(f);
+        }
+
+        return !error;
+    }
+    else
+    {
+        fprintf (stderr,"Error: Could not open %s\n", m_filename.c_str());
+        return false;
+    }
+}
+//-----------------------------------------------------------------
+// load: Binary load (memory assumed to already exist)
+//-----------------------------------------------------------------
+bool bin_load::load(uint32_t mem_base)
+{
+    // Load file
+    FILE *f = fopen(m_filename.c_str(), "rb");
+    if (f)
+    {
+        long size;
+        uint8_t *buf;
+        int error = 1;
+
+        // Get size
+        fseek(f, 0, SEEK_END);
+        size = ftell(f);
+        rewind(f);
+
+        buf = (uint8_t*)malloc(size);
+        if (buf)
+        {
+            // Read file data in
+            int len = fread(buf, 1, size, f);
+
+            error = 0;
+            for (int i=0;i<len;i++)
+            {
+                if (m_target->valid_addr(mem_base + i))
+                    m_target->write(mem_base + i, buf[i]);
+                else
+                {
+                    fprintf (stderr,"Error: Could not load image to memory\n");
+                    error = 1;
+                    break;
                 }
             }
 

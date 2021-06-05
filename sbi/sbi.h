@@ -5,26 +5,28 @@
 //                     Copyright 2014-2019
 //                    License: BSD 3-Clause
 //-----------------------------------------------------------------
-#ifndef __BIN_LOAD_H__
-#define __BIN_LOAD_H__
+#ifndef __SBI_H__
+#define __SBI_H__
 
-#include "mem_api.h"
 #include <string>
+#include <stdint.h>
+#include <vector>
+#include "cpu.h"
+#include "syscall_if.h"
 
+//-----------------------------------------------------------------
+// sbi: SBI hosting
 //--------------------------------------------------------------------
-// Binary loader
-//--------------------------------------------------------------------
-class bin_load
+class sbi: public syscall_if
 {
 public:
-    bin_load(const char *filename, mem_api *target);
+    sbi(console_io *conio);
+    bool syscall_handler(cpu *instance);
 
-    bool load(uint32_t mem_base, uint32_t mem_size);
-    bool load(uint32_t mem_base);
+    static bool setup(cpu *cpu, console_io *conio, uint32_t kernel_addr, uint32_t dtb_addr);
 
 protected:
-    std::string m_filename;
-    mem_api *   m_target;
+    console_io *m_conio;
 };
 
 #endif

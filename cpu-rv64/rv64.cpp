@@ -1397,8 +1397,14 @@ bool rv64::execute(void)
         DPRINTF(LOG_INST,("%016llx: ecall\n", pc));
         INST_STAT(ENUM_INST_ECALL);
 
-        exception(MCAUSE_ECALL_U + m_csr_mpriv, pc);
-        take_exception   = true;
+        // Semi-hosted system call?
+        if (syscall_handler())
+            pc += 4;
+        else
+        {
+            exception(MCAUSE_ECALL_U + m_csr_mpriv, pc);
+            take_exception   = true;
+        }
     }
     else if ((opcode & INST_EBREAK_MASK) == INST_EBREAK)
     {
@@ -2653,7 +2659,7 @@ void rv64::step(void)
     {
         if (m_csr_mtime == m_csr_mtimecmp && m_csr_mtime_ie)
         {
-            m_csr_mip     |= SR_IP_MTIP;
+            m_csr_mip     |= m_enable_sbi ? SR_IP_STIP : SR_IP_MTIP;
             m_csr_mtime_ie = false;
         }
     }
@@ -2720,9 +2726,49 @@ void rv64::set_interrupt(int irq)
 //-----------------------------------------------------------------
 void rv64::clr_interrupt(int irq)
 {
-    assert(irq == IRQ_M_TIMER);
+    assert(irq == IRQ_M_TIMER || irq == IRQ_M_EXT);
     if (irq == IRQ_M_TIMER && !m_enable_mtimecmp)
         m_csr_mip &= ~SR_IP_MTIP;
+    else if (irq == IRQ_M_EXT)
+    {
+#ifdef CPU_INTERRUPT_MEIP_ONLY
+        m_csr_mip &= ~(SR_IP_MEIP);
+#else
+        m_csr_mip &= ~(SR_IP_MEIP | SR_IP_SEIP);
+#endif
+    }
+}
+//-----------------------------------------------------------------
+// set_timer: Set built in timer interrupt
+//-----------------------------------------------------------------
+void rv64::set_timer(uint64_t value)
+{
+    m_enable_mtimecmp = true;
+    m_csr_mtime_ie    = true;
+    m_csr_mtimecmp    = value;
+    m_csr_mip        &= ~SR_IP_STIP;
+}
+//-----------------------------------------------------------------
+// in_super_mode: Is the CPU in SUPER mode
+//-----------------------------------------------------------------
+bool rv64::in_super_mode(void)
+{
+    return m_csr_mpriv == PRIV_SUPER;
+}
+//-----------------------------------------------------------------
+// sbi_boot: Boot to super mode (linux boot - SBI emulation)
+//-----------------------------------------------------------------
+void rv64::sbi_boot(uint32_t boot_addr, uint32_t dtb_addr)
+{
+    m_csr_mpriv   = PRIV_SUPER;
+    m_enable_sbi  = true;
+
+    m_csr_mideleg = ~0;
+    m_csr_medeleg = ~MCAUSE_ECALL_S;
+
+    m_pc = m_pc_x = boot_addr;
+    m_gpr[RISCV_REG_A0 + 0] = 0;
+    m_gpr[RISCV_REG_A0 + 1] = dtb_addr;
 }
 //-----------------------------------------------------------------
 // stats_reset: Reset runtime stats

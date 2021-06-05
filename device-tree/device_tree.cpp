@@ -41,6 +41,8 @@ device_tree::device_tree(const char *filename, console_io *con_io /*= NULL*/)
     m_fdt      = NULL;
     m_filename = std::string(filename);
     m_console  = con_io;
+    m_mem_base = 0;
+    m_mem_size = 0;
 }
 //-----------------------------------------------------------------
 // open_fdt: Open FDT file (binary)
@@ -121,6 +123,8 @@ bool device_tree::load(cpu *cpu)
 
                     printf("|- Attach memory: Addr %08x - %08x\n", reg_addr, reg_addr + reg_size - 1);
                     cpu->create_memory(reg_addr, reg_size);
+                    m_mem_base = reg_addr;
+                    m_mem_size = reg_size;
                 }
                 else if (!strcmp(device_type, "cpu"))
                 {
@@ -149,13 +153,13 @@ bool device_tree::load(cpu *cpu)
                     // Create IRQ controller
                     // TODO: Support multiple controllers
                     irq_ctrl = new device_irq_ctrl(reg_addr, 11);
-                    printf("|- Create interrupt controller: Addr %08x\n", reg_addr);
+                    printf("|- Create interrupt controller (Xilinx): Addr %08x\n", reg_addr);
                     cpu->attach_device(irq_ctrl);
                 }
-                else if (!strcmp(compat, "riscv,plic0"))
+                else if (!strcmp(compat, "riscv,plic0") || !strcmp(compat, "sifive,plic-1.0.0"))
                 {
                     irq_ctrl = new device_irq_plic(reg_addr, 11);
-                    printf("|- Create interrupt controller: Addr %08x\n", reg_addr);
+                    printf("|- Create interrupt controller (PLIC): Addr %08x\n", reg_addr);
                     cpu->attach_device(irq_ctrl);
                 }
                 else if (!strcmp(compat, "xlnx,xps-uartlite-1.00.a"))

@@ -20,12 +20,13 @@
 //--------------------------------------------------------------------
 // Constructor
 //--------------------------------------------------------------------
-elf_load::elf_load(const char *filename, mem_api *target, bool load_to_paddr /*= false*/)
+elf_load::elf_load(const char *filename, mem_api *target, bool load_to_paddr /*= false*/, int64_t load_offset /*= 0*/)
 {
     m_filename      = std::string(filename);
     m_target        = target;
     m_entry_point   = 0;
     m_load_to_paddr = load_to_paddr;
+    m_load_offset   = load_offset;
 }
 //--------------------------------------------------------------------
 // load: Load ELF to target
@@ -78,7 +79,7 @@ bool elf_load::load(void)
             if ((shdr64->sh_flags & SHF_ALLOC) && (shdr64->sh_size > 0))
             {
                 data = elf_getdata(scn, NULL);
-                uint64_t base_addr = shdr64->sh_addr;
+                uint64_t base_addr = shdr64->sh_addr + m_load_offset;
 
                 printf("Memory: 0x%lx - 0x%lx (Size=%ldKB) [%s]\n", shdr64->sh_addr, shdr64->sh_addr + shdr64->sh_size - 1, shdr64->sh_size / 1024, elf_strptr(e, shstrndx, shdr64->sh_name));
 
@@ -123,7 +124,7 @@ bool elf_load::load(void)
         else if ((shdr->sh_flags & SHF_ALLOC) && (shdr->sh_size > 0))
         {
             data = elf_getdata(scn, NULL);
-            uint32_t base_addr = shdr->sh_addr;
+            uint32_t base_addr = shdr->sh_addr + m_load_offset;
 
             printf("Memory: 0x%x - 0x%x (Size=%dKB) [%s]\n", shdr->sh_addr, shdr->sh_addr + shdr->sh_size - 1, shdr->sh_size / 1024, elf_strptr(e, shstrndx, shdr->sh_name));
 

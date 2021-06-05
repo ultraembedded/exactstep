@@ -87,7 +87,6 @@ public:
 
     void set_device(virtio_device *dev, uint32_t device_id, uint32_t vendor_id, uint32_t features)
     {
-        printf("Set device %08x %08x %08x\n", device_id, vendor_id, features);
         m_dev       = dev;
         m_device_id = device_id;
         m_vendor_id = vendor_id;
