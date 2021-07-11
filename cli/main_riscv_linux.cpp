@@ -28,7 +28,7 @@ static volatile bool m_user_abort = false;
 //-----------------------------------------------------------------
 // Command line options
 //-----------------------------------------------------------------
-#define GETOPTS_ARGS "t:v:r:f:D:m:c:e:V:T:h"
+#define GETOPTS_ARGS "t:v:r:f:D:m:c:e:V:T:i:h"
 
 static struct option long_options[] =
 {
@@ -42,6 +42,7 @@ static struct option long_options[] =
     {"trace-pc",   required_argument, 0, 'e'},
     {"vda",        required_argument, 0, 'V'},
     {"tap",        required_argument, 0, 'T'},
+    {"initrd",     required_argument, 0, 'i'},
     {"help",       no_argument,       0, 'h'},
     {0, 0, 0, 0}
 };
@@ -60,6 +61,7 @@ static void help_options(void)
     fprintf (stderr,"  --trace-pc   | -e PC         Trace from PC address\n");
     fprintf (stderr,"  --vda        | -V FILE       Disk image for VirtIO block device (/dev/vda)\n");
     fprintf (stderr,"  --tap        | -T TAP        Tap device for VirtIO net device\n");
+    fprintf (stderr,"  --initrd     | -i FILE       initrd binary (optional)\n");
     exit(-1);
 }
 //-----------------------------------------------------------------
@@ -92,6 +94,7 @@ int main(int argc, char *argv[])
     const char *   platform_name  = NULL;
     const char *   vda_file       = NULL;
     const char *   tap_device     = NULL;
+    const char *   initrd_filename= NULL;
     int c;
 
     int option_index = 0;
@@ -128,6 +131,9 @@ int main(int argc, char *argv[])
                 break;
             case 'T':
                 tap_device = optarg;
+                break;
+            case 'i':
+                initrd_filename = optarg;
                 break;
             case '?':
             default:
@@ -204,6 +210,29 @@ int main(int argc, char *argv[])
         {
             fprintf (stderr,"Error: Could not open %s\n", filename);
             return -1;
+        }
+    }
+
+    // Optional initrd
+    if (initrd_filename)
+    {
+        uint32_t initrd_base = plat->get_initrd_base();
+        uint32_t initrd_size = plat->get_initrd_size();
+
+        if (initrd_base == 0 || initrd_size == 0)
+        {
+            fprintf (stderr,"Error: linux,initrd-start / linux,initrd-end not specified\n");
+            return -1;
+        }
+        else
+        {
+            printf("Loading initrd to 0x%08x-0x%08x\n", initrd_base, initrd_base + initrd_size);
+            bin_load bin(initrd_filename, sim);
+            if (!bin.load(initrd_base))
+            {
+                fprintf (stderr,"Error: Could not open %s\n", initrd_filename);
+                return -1;
+            }
         }
     }
 

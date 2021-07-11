@@ -18,7 +18,7 @@ git clone https://github.com/ultraembedded/exactstep.git
 
 ## Building
 
-This project uses make and ELF + BFD libraries.
+This project uses make and ELF, BFD, FDT libraries.
 
 If you are using a Debian based Linux distro (Ubuntu / Linux Mint), you can install the required dependencies using;
 
@@ -26,15 +26,16 @@ If you are using a Debian based Linux distro (Ubuntu / Linux Mint), you can inst
 sudo apt-get install libelf-dev binutils-dev libfdt-dev
 ```
 
-To build the default command line simulator (CLI);
+To build the default command line simulator and RISC-V Linux simulators;
 ```
 cd exactstep
 make
 ```
 
-## Usage
-
+## ExactStep: Usage
+*exactstep* supports various emulated CPU architectures (RISC-V, MIPS, ARM), and is used to run bare-metal executables compiled for those ISAs;
 ```
+./exactstep
 Usage:
   --elf        | -f FILE       File to load (ELF or BIN)
   --march      | -m MISA       Machine variant (e.g. RV32IMAC, RV64I, armv6, mips, ...)
@@ -62,14 +63,30 @@ The default architecture is a RV32IMAC CPU model. To run a basic ELF;
 ./exactstep -f your_elf.elf 
 ```
 
-## Running RISC-V Linux
-```
-# Get prebuilt bootloader + kernel + rootfs images
-git clone https://github.com/ultraembedded/riscv-linux-prebuilt.git
-cd riscv-linux-prebuilt
+## Exactstep-riscv-linux: Usage
+*exactstep-riscv-linux* is a RISC-V (32-bit or 64-bit) specific simulator which contains a built-in SBI (Supervisor Binary Interface) implementation that enables booting RISC-V Linux kernels compiled for supervisor mode.
+Root filesystems can also be provided by initrd, VirtIO block device, or VirtIO network (nfs) boot.
 
-# Boot Linux (with Busybox userspace)
-exactstep --march RV64IMAC --elf opensbi-kernel-busybox/qemu-virt-rv64-5.4-rc7-busybox-1.32.0.elf --dtb opensbi-kernel-busybox/qemu-virt-rv64-config.dtb
+```
+./exactstep-riscv-linux
+Usage:
+  --elf        | -f FILE       File to load (ELF or BIN)
+  --march      | -m MISA       Machine variant (e.g. RV32IMAC, RV64I, ...)
+  --platform   | -P PLATFORM   Platform to simulate (basic|virt)
+  --dtb        | -D FILE       Device tree blob (binary)
+  --trace      | -t 1/0        Enable instruction trace
+  --trace-mask | -v 0xXX       Trace mask (verbosity level)
+  --cycles     | -c NUM        Max instructions to execute
+  --stop-pc    | -r PC         Stop at PC address
+  --trace-pc   | -e PC         Trace from PC address
+  --vda        | -V FILE       Disk image for VirtIO block device (/dev/vda)
+  --tap        | -T TAP        Tap device for VirtIO net device
+  --initrd     | -i FILE       initrd binary (optional)
+```
+
+Example usage (with a device tree compiled to a DTB file using the Linux Kernel dtc util);
+```sh
+./exactstep-riscv-linux --elf ./vmlinux-rv32ima-5.0 --dtb ./config.dtb --initrd ./initrd.cpio 
 ```
 
 ## Running RISC-V Compliance Tests
@@ -85,6 +102,16 @@ export TARGET_SIM=/path/to/github/exactstep/exactstep
 
 # Run test suite
 make RISCV_TARGET=exactstep
+```
+
+## Running RISC-V Linux
+```
+# Get prebuilt bootloader + kernel + rootfs images
+git clone https://github.com/ultraembedded/riscv-linux-prebuilt.git
+cd riscv-linux-prebuilt
+
+# Boot Linux (with Busybox userspace)
+exactstep --march RV64IMAC --elf opensbi-kernel-busybox/qemu-virt-rv64-5.4-rc7-busybox-1.32.0.elf --dtb opensbi-kernel-busybox/qemu-virt-rv64-config.dtb
 ```
 
 ## License

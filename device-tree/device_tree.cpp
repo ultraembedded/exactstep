@@ -38,11 +38,13 @@ extern "C"
 //-----------------------------------------------------------------
 device_tree::device_tree(const char *filename, console_io *con_io /*= NULL*/)
 {
-    m_fdt      = NULL;
-    m_filename = std::string(filename);
-    m_console  = con_io;
-    m_mem_base = 0;
-    m_mem_size = 0;
+    m_fdt         = NULL;
+    m_filename    = std::string(filename);
+    m_console     = con_io;
+    m_mem_base    = 0;
+    m_mem_size    = 0;
+    m_initrd_base = 0;
+    m_initrd_end  = 0;
 }
 //-----------------------------------------------------------------
 // open_fdt: Open FDT file (binary)
@@ -130,6 +132,17 @@ bool device_tree::load(cpu *cpu)
                 {
                     continue;
                 }
+            }
+
+            // Find initrd params
+            {
+                const uint32_t *reg = (const uint32_t*)fdt_getprop(m_fdt, offset, "linux,initrd-start", &size);
+                if (reg)
+                    m_initrd_base = ntohl(reg[0]);
+
+                reg = (const uint32_t*)fdt_getprop(m_fdt, offset, "linux,initrd-end", &size);
+                if (reg)
+                    m_initrd_end = ntohl(reg[0]);
             }
 
             // Match device

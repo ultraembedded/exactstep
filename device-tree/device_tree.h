@@ -32,6 +32,9 @@ public:
     uint32_t     get_mem_base(void) { return m_mem_base; }
     uint32_t     get_mem_size(void) { return m_mem_size; }
 
+    uint32_t     get_initrd_base(void) { return m_initrd_base; }
+    uint32_t     get_initrd_size(void) { return m_initrd_end - m_initrd_base; }
+
 protected:
     bool         open_fdt(void);
     int          process_node(int offset);
@@ -42,6 +45,8 @@ protected:
     console_io  *m_console;
     uint32_t     m_mem_base;
     uint32_t     m_mem_size;
+    uint32_t     m_initrd_base;
+    uint32_t     m_initrd_end;
 };
 
 #endif
