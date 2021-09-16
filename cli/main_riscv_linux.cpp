@@ -28,7 +28,7 @@ static volatile bool m_user_abort = false;
 //-----------------------------------------------------------------
 // Command line options
 //-----------------------------------------------------------------
-#define GETOPTS_ARGS "t:v:r:f:D:m:c:e:V:T:i:h"
+#define GETOPTS_ARGS "t:v:r:f:D:B:m:c:e:V:T:i:b:h"
 
 static struct option long_options[] =
 {
@@ -36,7 +36,9 @@ static struct option long_options[] =
     {"trace-mask", required_argument, 0, 'v'},
     {"stop-pc",    required_argument, 0, 'r'},
     {"elf",        required_argument, 0, 'f'},
+    {"bin",        required_argument, 0, 'b'},
     {"dtb",        required_argument, 0, 'D'},
+    {"dtb-base",   required_argument, 0, 'B'},
     {"march",      required_argument, 0, 'm'},
     {"cycles",     required_argument, 0, 'c'},
     {"trace-pc",   required_argument, 0, 'e'},
@@ -50,10 +52,12 @@ static struct option long_options[] =
 static void help_options(void)
 {
     fprintf (stderr,"Usage:\n");
-    fprintf (stderr,"  --elf        | -f FILE       File to load (ELF or BIN)\n");
+    fprintf (stderr,"  --elf        | -f FILE       File to load (ELF)\n");
+    fprintf (stderr,"  --bin        | -b FILE       File to load (binary)\n");
     fprintf (stderr,"  --march      | -m MISA       Machine variant (e.g. RV32IMAC, RV64I, ...)\n");
     fprintf (stderr,"  --platform   | -P PLATFORM   Platform to simulate (basic|virt)\n");
     fprintf (stderr,"  --dtb        | -D FILE       Device tree blob (binary)\n");
+    fprintf (stderr,"  --dtb-base   | -B 0xaddr     Device tree blob load address\n");
     fprintf (stderr,"  --trace      | -t 1/0        Enable instruction trace\n");
     fprintf (stderr,"  --trace-mask | -v 0xXX       Trace mask (verbosity level)\n");
     fprintf (stderr,"  --cycles     | -c NUM        Max instructions to execute\n");
@@ -84,12 +88,14 @@ int main(int argc, char *argv[])
     uint64_t       cycles         = 0;
     int64_t        max_cycles     = (int64_t)-1;
     const char *   filename       = NULL;
+    bool           is_binary      = false;
     const char *   march          = NULL;
     int            help           = 0;
     int            trace          = 0;
     uint32_t       trace_mask     = 1;
     uint32_t       stop_pc        = 0xFFFFFFFF;
     uint32_t       trace_pc       = 0xFFFFFFFF;
+    uint32_t       dtb_base_user  = 0xFFFFFFFF;
     const char *   device_blob    = NULL;
     const char *   platform_name  = NULL;
     const char *   vda_file       = NULL;
@@ -112,13 +118,21 @@ int main(int argc, char *argv[])
                 stop_pc = strtoul(optarg, NULL, 0);
                 break;
             case 'f':
-                filename = optarg;
+                filename  = optarg;
+                is_binary = false;
+                break;
+            case 'b':
+                filename  = optarg;
+                is_binary = true;
                 break;
             case 'm':
                 march = optarg;
                 break;
             case 'D':
                 device_blob = optarg;
+                break;
+            case 'B':
+                dtb_base_user = strtoul(optarg, NULL, 0);
                 break;
             case 'c':
                 max_cycles = (int64_t)strtoull(optarg, NULL, 0);
@@ -162,7 +176,7 @@ int main(int argc, char *argv[])
     uint32_t mem_size = plat->get_mem_size();
 
     // Create some extra space for the DTB
-    uint32_t dtb_base = (mem_base + mem_size + 4096) & ~(4096-1);
+    uint32_t dtb_base = (dtb_base_user != 0xFFFFFFFF) ? dtb_base_user : ((mem_base + mem_size + 4096) & ~(4096-1));
     uint32_t dtb_size = (64 * 1024);
 
     printf("MEM: Create memory 0x%08x-%08x\n", mem_base, mem_base + mem_size-1);
@@ -181,7 +195,7 @@ int main(int argc, char *argv[])
 
     // Load kernel
     const char *ext   = filename ? strrchr(filename, '.') : NULL;
-    bool is_bin = ext && !strcmp(ext, ".bin");
+    bool is_bin = is_binary || (ext && !strcmp(ext, ".bin"));
 
     // Binary
     if (is_bin)

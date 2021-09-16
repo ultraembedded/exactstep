@@ -18,15 +18,24 @@
 //-----------------------------------------------------------------
 // SYSCALLs
 //-----------------------------------------------------------------
-#define SBI_SET_TIMER 0
-#define SBI_CONSOLE_PUTCHAR 1
-#define SBI_CONSOLE_GETCHAR 2
-#define SBI_CLEAR_IPI 3
-#define SBI_SEND_IPI 4
-#define SBI_REMOTE_FENCE_I 5
-#define SBI_REMOTE_SFENCE_VMA 6
+#define SBI_SET_TIMER              0
+#define SBI_CONSOLE_PUTCHAR        1
+#define SBI_CONSOLE_GETCHAR        2
+#define SBI_CLEAR_IPI              3
+#define SBI_SEND_IPI               4
+#define SBI_REMOTE_FENCE_I         5
+#define SBI_REMOTE_SFENCE_VMA      6
 #define SBI_REMOTE_SFENCE_VMA_ASID 7
-#define SBI_SHUTDOWN 8
+#define SBI_SHUTDOWN               8
+#define SBI_EXT_BASE               16
+
+#define SBI_EXT_SPEC_VERSION       0
+#define SBI_EXT_IMPL_ID            1
+#define SBI_EXT_IMPL_VERSION       2
+#define SBI_EXT_PROBE_EXTENSION    3
+#define SBI_EXT_GET_MVENDORID      4
+#define SBI_EXT_GET_MARCHID        5
+#define SBI_EXT_GET_MIMPID         6
 
 //-----------------------------------------------------------------
 // setup: Setup SBI handler (and load some binaries)
@@ -34,9 +43,15 @@
 bool sbi::setup(cpu *cpu, console_io *conio, uint32_t kernel_addr, uint32_t dtb_addr)
 {
     if (cpu->get_reg_width() == 64)
+    {
         ((rv64*)cpu)->sbi_boot(kernel_addr, dtb_addr);
+        ((rv64*)cpu)->enable_mem_unaligned(true);
+    }
     else
+    {
         ((rv32*)cpu)->sbi_boot(kernel_addr, dtb_addr);
+        ((rv32*)cpu)->enable_mem_unaligned(true);
+    }
 
     // Register SBI syscall handler
     cpu->set_syscall_handler(new sbi(conio));
@@ -49,7 +64,34 @@ bool sbi::setup(cpu *cpu, console_io *conio, uint32_t kernel_addr, uint32_t dtb_
 sbi::sbi(console_io *conio)
 {
     m_conio = conio;
-}   
+}
+//-----------------------------------------------------------------
+// sbi_ext: Extended SBI API
+//-----------------------------------------------------------------
+uint32_t sbi::sbi_ext(uint32_t fid, uint32_t extid)
+{
+    switch (fid)
+    {
+        case SBI_EXT_SPEC_VERSION:
+            return 0x1;
+        case SBI_EXT_PROBE_EXTENSION:
+            switch (extid)
+            {
+                case SBI_CONSOLE_PUTCHAR:
+                case SBI_CONSOLE_GETCHAR:
+                case SBI_SET_TIMER:
+                case SBI_EXT_BASE:
+                    return 1;
+                default:
+                    return 0;
+            }
+            break;
+        default:
+            return 0;
+    }
+
+    return 0;
+}
 //-----------------------------------------------------------------
 // syscall_handler: Try and execute a hosted system call
 //-----------------------------------------------------------------
@@ -104,6 +146,9 @@ bool sbi::syscall_handler(cpu *cpu)
             return true;
         case SBI_REMOTE_FENCE_I:
         case SBI_REMOTE_SFENCE_VMA:
+            return true;
+        case SBI_EXT_BASE:
+            SET_RET(sbi_ext(a0, a1));
             return true;
         default:
             printf("SBI: Unhandled SYSCALL, stopping... (id=%d)\n", which);

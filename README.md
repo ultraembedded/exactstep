@@ -70,10 +70,12 @@ Root filesystems can also be provided by initrd, VirtIO block device, or VirtIO 
 ```
 ./exactstep-riscv-linux
 Usage:
-  --elf        | -f FILE       File to load (ELF or BIN)
+  --elf        | -f FILE       File to load (ELF)
+  --bin        | -b FILE       File to load (binary)
   --march      | -m MISA       Machine variant (e.g. RV32IMAC, RV64I, ...)
   --platform   | -P PLATFORM   Platform to simulate (basic|virt)
   --dtb        | -D FILE       Device tree blob (binary)
+  --dtb-base   | -B 0xaddr     Device tree blob load address
   --trace      | -t 1/0        Enable instruction trace
   --trace-mask | -v 0xXX       Trace mask (verbosity level)
   --cycles     | -c NUM        Max instructions to execute

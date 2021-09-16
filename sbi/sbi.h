@@ -22,6 +22,7 @@ class sbi: public syscall_if
 public:
     sbi(console_io *conio);
     bool syscall_handler(cpu *instance);
+    uint32_t sbi_ext(uint32_t fid, uint32_t extid);
 
     static bool setup(cpu *cpu, console_io *conio, uint32_t kernel_addr, uint32_t dtb_addr);
 

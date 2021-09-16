@@ -31,6 +31,7 @@
 //-----------------------------------------------------------------
 rv64::rv64(uint32_t baseAddr /*= 0*/, uint32_t len /*= 0*/): cpu()
 {
+    m_enable_unaligned   = false;
     m_enable_mem_errors  = false;
     m_compliant_csr      = false;
     m_enable_rvm         = true;
@@ -180,11 +181,7 @@ void rv64::reset(uint32_t start_addr)
     m_break         = false;
     m_trace         = 0;
 
-    for (int i=0;i<MMU_TLB_ENTRIES;i++)
-    {
-        m_mmu_addr[i] = 0;
-        m_mmu_pte[i]  = 0;
-    }
+    mmu_flush();
 
     stats_reset();
 }
@@ -222,6 +219,17 @@ int rv64::mmu_read_word(uint64_t address, uint64_t *val)
         }
 
     return 0;
+}
+//-----------------------------------------------------------------
+// mmu_flush: Flush cached MMU TLBs
+//-----------------------------------------------------------------
+void rv64::mmu_flush(void)
+{
+    for (int i=0;i<MMU_TLB_ENTRIES;i++)
+    {
+        m_mmu_addr[i] = 0;
+        m_mmu_pte[i]  = 0;
+    }
 }
 //-----------------------------------------------------------------
 // mmu_walk: Page table walker
@@ -470,16 +478,41 @@ int rv64::load(uint64_t pc, uint64_t address, uint64_t *result, int width, bool 
         return 0;
 
     DPRINTF(LOG_MEM, ("LOAD: VA 0x%08x PA 0x%08x Width %d\n", address, physical, width));
+    m_stats[STATS_LOADS]++;
+    *result = 0;
 
     // Detect misaligned load
     if (((address & 7) != 0 && width == 8) || ((address & 3) != 0 && width == 4) || ((address & 1) != 0 && width == 2))
     {
+        // Support for unaligned loads
+        if (m_enable_unaligned)
+        {
+            int ok = 1;
+            for (int j=0;j<width;j++)
+            {
+                uint64_t tmp_res = 0;
+                if (!load(pc, address + j, &tmp_res, 1, false))
+                {
+                    ok = 0;
+                    break;
+                }
+
+                *result |= (tmp_res << (8 * j));
+            }
+
+            if (width == 4 && signedLoad && ((*result) & (1 << 31)))
+                 *result |= 0xFFFFFFFF00000000;
+            if (width == 2 && signedLoad && ((*result) & (1 << 15)))
+                 *result |= 0xFFFFFFFFFFFF0000;
+            if (width == 1 && signedLoad && ((*result) & (1 << 7)))
+                 *result |= 0xFFFFFFFFFFFFFF00;
+
+            return ok;
+        }
+
         exception(MCAUSE_MISALIGNED_LOAD, pc, address);
         return 0;
     }
-
-    m_stats[STATS_LOADS]++;
-    *result = 0;
 
     for (memory_base *mem = m_memories; mem != NULL; mem = mem->next)
         if (mem->valid_addr(physical))
@@ -502,7 +535,7 @@ int rv64::load(uint64_t pc, uint64_t address, uint64_t *result, int width, bool 
                     *result = dw;
 
                     if (signedLoad && ((*result) & (1 << 31)))
-                         *result |= 0xFFFFFFFF00000000;                    
+                         *result |= 0xFFFFFFFF00000000;
                 }
                 break;
                 case 2:
@@ -555,16 +588,31 @@ int rv64::store(uint64_t pc, uint64_t address, uint64_t data, int width)
         return 0;
 
     DPRINTF(LOG_MEM, ("STORE: VA 0x%08x PA 0x%08x Value 0x%08x Width %d\n", address, physical, data, width));
+    m_stats[STATS_STORES]++;
 
-    // Detect misaligned load
+    // Detect misaligned store
     if (((address & 7) != 0 && width == 8) || ((address & 3) != 0 && width == 4) || ((address & 1) != 0 && width == 2))
     {
+        // Support for unaligned stores
+        if (m_enable_unaligned)
+        {
+            int ok = 1;
+            for (int j=0;j<width;j++)
+            {
+                if (!store(pc, address + j, (data >> (j*8)), 1))
+                {
+                    ok = 0;
+                    break;
+                }
+            }
+            return ok;
+        }
+
         exception(MCAUSE_MISALIGNED_STORE, pc, address);
         return 0;
     }
 
-    m_stats[STATS_STORES]++;
-
+    // Aligned stores
     for (memory_base *mem = m_memories; mem != NULL; mem = mem->next)
         if (mem->valid_addr(physical))
         {
@@ -674,6 +722,10 @@ bool rv64::access_csr(uint64_t address, uint64_t data, bool set, bool clr, uint6
     uint64_t misa_val = MISA_VALUE;
     misa_val |= m_enable_rvc ? MISA_RVC : 0;
     misa_val |= m_enable_rva ? MISA_RVA : 0;
+
+    // SATP write - flush cached TLBs
+    if (((address & 0xFFF) == CSR_SATP) && (set || clr))
+        mmu_flush();
 
     switch (address & 0xFFF)
     {
@@ -1475,12 +1527,7 @@ bool rv64::execute(void)
 
         // SFENCE.VMA
         if ((opcode & INST_SFENCE_MASK) == INST_SFENCE)
-            for (int i=0;i<MMU_TLB_ENTRIES;i++)
-            {
-                m_mmu_addr[i]      = 0;
-                m_mmu_pte[i]       = 0;
-            }
-
+            mmu_flush();
         pc += 4;
     }
     else if ((opcode & INST_CSRRW_MASK) == INST_CSRRW)
@@ -1925,6 +1972,7 @@ bool rv64::execute(void)
         else
             reg_rd = 1;
 
+        m_load_res = 0;
         INST_STAT(ENUM_INST_SW);
         pc += 4;
     }
@@ -2134,6 +2182,7 @@ bool rv64::execute(void)
         else
             reg_rd = 1;
 
+        m_load_res = 0;
         INST_STAT(ENUM_INST_SD);
         pc += 4;
     }

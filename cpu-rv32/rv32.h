@@ -40,7 +40,8 @@ public:
     void                stats_reset(void);
     void                stats_dump(void);
 
-    void                enable_mem_errors(bool en) { m_enable_mem_errors = en; }
+    void                enable_mem_unaligned(bool en) { m_enable_unaligned = en; }
+    void                enable_mem_errors(bool en)    { m_enable_mem_errors = en; }
     void                enable_compliant_csr(bool en) { m_compliant_csr = en; }
 
     // First register for args in ABI
@@ -68,6 +69,7 @@ protected:
 
 // MMU
 private:
+    void                mmu_flush(void);
     int                 mmu_read_word(uint32_t address, uint32_t *val);
     uint32_t            mmu_walk(uint32_t addr);
     int                 mmu_i_translate(uint32_t addr, uint32_t *physical);
@@ -111,6 +113,7 @@ private:
     uint32_t            m_mmu_pte[MMU_TLB_ENTRIES];
 
     // Settings
+    bool                m_enable_unaligned;
     bool                m_enable_mem_errors;
     bool                m_compliant_csr;
     bool                m_enable_rvm;

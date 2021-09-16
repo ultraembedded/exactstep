@@ -19,8 +19,10 @@
 #define PLIC_REG_PENDING3            0x100c
 #define PLIC_REG_ENABLE0             0x2000
 #define PLIC_REG_ENABLE3             0x200c
+#define PLIC_ENABLE_PER_HART         0x80
 #define PLIC_REG_PRIO_THRESH         0x00200000
 #define PLIC_REG_CLAIM               0x00200004
+#define PLIC_CONTEXT_PER_HART        0x1000
 
 #define PLIC_NUM_IRQS                128
 #define PLIC_REG_SIZE                (0x10000000 - 0x0c000000)
@@ -42,7 +44,7 @@ public:
         for (int x=0;x<PLIC_IRQ_GROUPS;x++)
         {
             m_pending[x] = 0;
-            m_enable[x] = 0;
+            m_enable[x]  = 0;
         }
         for (int i=0;i<PLIC_NUM_IRQS;i++)
             m_prio[i] = 0;
@@ -104,10 +106,13 @@ public:
             m_prio[(address-PLIC_REG_SRC_PRIO0)/4] = data;
         else if (address >= PLIC_REG_ENABLE0 && address <= PLIC_REG_ENABLE3)
             m_enable[(address-PLIC_REG_ENABLE0)/4] = data;
-        else if (address == PLIC_REG_PRIO_THRESH)
+        // Context 1 (S) aliases to context 0 (M) in this implementation
+        else if (address >= (PLIC_REG_ENABLE0 + PLIC_ENABLE_PER_HART) && address <= (PLIC_REG_ENABLE3 + PLIC_ENABLE_PER_HART))
+            m_enable[(address-PLIC_REG_ENABLE0-PLIC_ENABLE_PER_HART)/4] = data;
+        else if ((address == PLIC_REG_PRIO_THRESH) || (address == PLIC_REG_PRIO_THRESH + PLIC_CONTEXT_PER_HART))
             m_prio_thresh = data;
         // Complete interrupt
-        else if (address == PLIC_REG_CLAIM)
+        else if ((address == PLIC_REG_CLAIM) || (address == (PLIC_REG_CLAIM + PLIC_CONTEXT_PER_HART)))
         {
             // Interrupt claimed - clear
             if (data > 0)
@@ -148,12 +153,18 @@ public:
             data = m_enable[(address-PLIC_REG_ENABLE0)/4];
             return true;
         }
-        else if (address == PLIC_REG_PRIO_THRESH)
+        // Context 1 (S) aliases to context 0 (M) in this implementation
+        else if (address >= (PLIC_REG_ENABLE0 + PLIC_ENABLE_PER_HART) && address <= (PLIC_REG_ENABLE3 + PLIC_ENABLE_PER_HART))
+        {
+            data = m_enable[(address-PLIC_REG_ENABLE0 - PLIC_ENABLE_PER_HART)/4];
+            return true;
+        }
+        else if ((address == PLIC_REG_PRIO_THRESH) || (address == PLIC_REG_PRIO_THRESH + PLIC_CONTEXT_PER_HART))
         {
             data = m_prio_thresh;
             return true;
         }
-        else if (address == PLIC_REG_CLAIM)
+        else if ((address == PLIC_REG_CLAIM) || (address == (PLIC_REG_CLAIM + PLIC_CONTEXT_PER_HART)))
         {
             int irq = eval_irq();
             data = (uint32_t)irq;
