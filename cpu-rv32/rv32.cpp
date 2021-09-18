@@ -2259,8 +2259,7 @@ void rv32::step(void)
     if (m_enable_mtimecmp)
     {
         // Limited internal timer, truncate to 32-bits
-        m_csr_mtime &= 0xFFFFFFFF;
-        if (m_csr_mtime == m_csr_mtimecmp && m_csr_mtime_ie)
+        if ((m_csr_mtime & 0xFFFFFFFF) == m_csr_mtimecmp && m_csr_mtime_ie)
         {
             m_csr_mip     |= m_enable_sbi ? SR_IP_STIP : SR_IP_MTIP;
             m_csr_mtime_ie = false;
